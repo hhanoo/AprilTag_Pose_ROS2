@@ -1,0 +1,42 @@
+pose_estimator_node:
+  ros__parameters:
+    # =========================================================
+    # AprilTag Configuration
+    # =========================================================
+    marker_ids: [0, 1, 2]               # IDs of markers to use
+    base_marker_id: 1                  # Base marker ID (-1: use first marker_id)
+    tag_size: 0.02778                   # Tag size in meters (27.78mm)
+    tag_family: 'tagStandard41h12'      # AprilTag family
+    marker_offsets: [0.065, 0.0]        # [X, Y] offset between markers (m)
+    
+    # =========================================================
+    # Target Point Offsets
+    # Flat list format: [x0, y0, z0, x1, y1, z1, ...]
+    # 2 points x 3 coordinates = 6 values
+    # =========================================================
+    point_offsets: [
+      0.000, 0.000, 0.000,    # Point 1
+      0.000, 0.000, 0.000,    # Point 2
+    ]
+    
+    # =========================================================
+    # Input Topics (Subscribe)
+    # =========================================================
+    camera_topic: 'camera/camera/color/image_raw'        # Camera image input
+    camera_info_topic: 'camera/camera/color/camera_info' # Camera info input
+    camera_frame: 'camera_color_optical_frame'            # RealSense optical frame
+    
+    # =========================================================
+    # Output Topics (Publish)
+    # =========================================================
+    pose_topic: 'pose_estimator_node/target_poses'                # Target point poses output
+    detection_image_topic: 'pose_estimator_node/detection_image'  # Detection visualization image
+    marker_topic: 'visualization_markers'                         # RViz2 visualization markers
+    
+    # =========================================================
+    # Publishing Options
+    # =========================================================
+    publish_visualization: true      # Publish RViz2 markers
+    publish_detection_image: true    # Publish detection image
+
+

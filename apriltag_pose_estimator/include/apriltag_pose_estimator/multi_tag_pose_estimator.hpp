@@ -1,0 +1,61 @@
+#ifndef APRILTAG_POSE_ESTIMATOR__MULTI_TAG_POSE_ESTIMATOR_HPP_
+#define APRILTAG_POSE_ESTIMATOR__MULTI_TAG_POSE_ESTIMATOR_HPP_
+
+#include <Eigen/Dense>
+#include <opencv2/opencv.hpp>
+#include <vector>
+
+#include "apriltag_pose_estimator/tag_config.hpp"
+
+namespace apriltag_pose_estimator {
+
+class MultiTagPoseEstimator {
+   public:
+    // ========================================================================
+    // Constructor
+    // ========================================================================
+    MultiTagPoseEstimator(
+        const std::vector<int>&                marker_ids,          // Marker IDs to use
+        const std::vector<float>&              marker_offsets,      // [X, Y] offset between markers
+        const std::vector<std::vector<float>>& point_offsets,       // Target point offsets (Nx3)
+        float                                  tag_size,            // Tag size in meters
+        const cv::Mat&                         camera_matrix,       // Camera intrinsic matrix
+        const cv::Mat&                         dist_coeffs,         // Distortion coefficients
+        int                                    base_marker_id = -1  // Base marker ID (default: first marker ID)
+    );
+
+    // ========================================================================
+    // Pose Estimation Functions
+    // ========================================================================
+    bool estimate(
+        const std::vector<TagDetection>& tags,             // Detected AprilTags
+        cv::Mat&                         img,              // Image to draw on
+        std::vector<Eigen::Matrix4f>&    point_transforms  // Output: point transforms
+    );
+
+   private:
+    // ========================================================================
+    // Utility Functions
+    // ========================================================================
+    Eigen::Matrix4f rvecTvecToMatrix(
+        const cv::Mat& rvec,  // Rotation vector
+        const cv::Mat& tvec   // Translation vector
+    );
+
+    // ========================================================================
+    // Member Variables
+    // ========================================================================
+    std::vector<int>                marker_ids_;       // Marker IDs to use (default: [0, 1, 2])
+    float                           marker_offset_x_;  // Marker offset X (default: 0.065)
+    float                           marker_offset_y_;  // Marker offset Y (default: 0.0)
+    std::vector<std::vector<float>> point_offsets_;    // Target point offsets (Nx3)
+    int                             point_count_;      // Number of target points (default: 6)
+    float                           tag_size_;         // Tag size in meters (default: 0.02778)
+    cv::Mat                         camera_matrix_;    // Camera intrinsic matrix (3x3)
+    cv::Mat                         dist_coeffs_;      // Distortion coefficients (5x1)
+    int                             base_marker_id_;   // Base marker ID (default: first marker ID)
+};
+
+}  // namespace apriltag_pose_estimator
+
+#endif  // APRILTAG_POSE_ESTIMATOR__MULTI_TAG_POSE_ESTIMATOR_HPP_

@@ -1,0 +1,38 @@
+pose_estimator_node:
+  ros__parameters:
+    # =========================================================
+    # AprilTag Configuration
+    # =========================================================
+    marker_ids: [0, 1, 2]
+    base_marker_id: 1
+    tag_size: 0.02778
+    tag_family: 'tagStandard41h12'
+    marker_offsets: [0.065, 0.0]
+    
+    # =========================================================
+    # Target Point Offsets
+    # Flat list format: [x0, y0, z0, x1, y1, z1, ...]
+    # 6 points x 3 coordinates = 18 values
+    # =========================================================
+    point_offsets: [
+      0.001, 0.001, -0.150,    # Point 0
+      0.0, 0.0, -0.300,         # Point 1
+      0.200, 0.200, -0.300,     # Point 2
+      -0.200, 0.200, -0.300,    # Point 3
+      -0.200, -0.200, -0.300,   # Point 4
+      0.200, -0.200, -0.300     # Point 5
+    ]
+    
+    # =========================================================
+    # Camera Configuration
+    # =========================================================
+    camera_topic: 'color/image_raw'
+    camera_info_topic: 'color/camera_info'
+    camera_frame: 'camera_color_optical_frame'
+    
+    # =========================================================
+    # Publishing Options
+    # =========================================================
+    publish_visualization: true
+    publish_detection_image: true
+

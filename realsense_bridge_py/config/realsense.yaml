@@ -1,0 +1,28 @@
+realsense_node:
+  ros__parameters:
+    # =========================================================
+    # Camera Selection
+    # =========================================================
+    serial_number: ''  # Empty string for first available camera
+    
+    # =========================================================
+    # Stream Configuration
+    # =========================================================
+    frame_rate: 30
+    resolution:
+      width: 1280
+      height: 720
+    
+    # =========================================================
+    # Frame IDs
+    # =========================================================
+    frame_ids:
+      color: 'camera_color_optical_frame'
+      depth: 'camera_depth_optical_frame'
+    
+    # =========================================================
+    # Stream Options
+    # =========================================================
+    enable_depth: false
+    auto_exposure: true
+

@@ -1,0 +1,57 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>apriltag_pose_estimator</name>
+  <version>0.0.0</version>
+  <description>AprilTag-based multi-target pose estimator (C++)</description>
+
+  <maintainer email="woo980711@gmail.com">hhanoo</maintainer>
+  
+  <license>MIT</license>
+
+  <!-- ========================================================= -->
+  <!-- Build tool dependencies -->
+  <!-- ========================================================= -->
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <!-- ========================================================= -->
+  <!-- Core ROS2 dependencies -->
+  <!-- ========================================================= -->
+  <!-- * ROS 2 C++ client library -->
+  <depend>rclcpp</depend>
+  
+  <!-- * Pose and geometry message types -->
+  <depend>geometry_msgs</depend>
+  
+  <!-- * Image and camera info message types -->
+  <depend>sensor_msgs</depend>
+  
+  <!-- * Visualization markers for RViz -->
+  <depend>visualization_msgs</depend>
+  
+  <!-- * OpenCV-ROS2 image conversion bridge -->
+  <depend>cv_bridge</depend>
+
+  <!-- * OpenCV library -->
+  <depend>libopencv-dev</depend>
+
+  <!-- * Eigen3 for matrix operations -->
+  <depend>libeigen3-dev</depend>
+
+  <!-- * AprilTag C library -->
+  <depend>libapriltag-dev</depend>
+
+  <!-- ========================================================= -->
+  <!-- Test dependencies -->
+  <!-- ========================================================= -->
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <!-- ========================================================= -->
+  <!-- Export build type -->
+  <!-- ========================================================= -->
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
+
