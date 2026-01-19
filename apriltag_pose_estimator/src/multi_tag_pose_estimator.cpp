@@ -122,7 +122,7 @@ bool MultiTagPoseEstimator::estimate(
             target_points_[i].rotation_rpy(2),
             Eigen::Vector3f::UnitZ());
 
-        Eigen::Matrix3f R_offset = roll.matrix() * pitch.matrix() * yaw.matrix();
+        Eigen::Matrix3f R_offset = yaw.matrix() * pitch.matrix() * roll.matrix();
 
         Eigen::Matrix4f T_marker_2_target_point   = Eigen::Matrix4f::Identity();
         T_marker_2_target_point.block<3, 3>(0, 0) = R_offset;
