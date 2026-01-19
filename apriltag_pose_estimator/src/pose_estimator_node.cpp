@@ -18,9 +18,9 @@ PoseEstimatorNode::PoseEstimatorNode()
     this->declare_parameter("tag_size", 0.02778);
     this->declare_parameter("tag_family", "tagStandard41h12");
     this->declare_parameter("marker_offsets", std::vector<double>{0.065, 0.0});
-    this->declare_parameter("point_offsets", std::vector<double>{
-                                                 0.000, 0.000, 0.000,  // Point 1
-                                                 0.000, 0.000, 0.000,  // Point 2
+    this->declare_parameter("target_points", std::vector<double>{
+                                                 0.000, 0.000, 0.000, 0.000, 0.000, 0.000,  // Point 1 (x y z r p y)
+                                                 0.000, 0.000, 0.000, 0.000, 0.000, 0.000   // Point 2 (x y z r p y)
                                              });
     // * Input topics
     this->declare_parameter("camera_topic", "realsense_node/color/image_raw");
@@ -41,7 +41,7 @@ PoseEstimatorNode::PoseEstimatorNode()
     tag_size_           = this->get_parameter("tag_size").as_double();
     tag_family_         = this->get_parameter("tag_family").as_string();
     marker_offsets_     = this->get_parameter("marker_offsets").as_double_array();
-    point_offsets_flat_ = this->get_parameter("point_offsets").as_double_array();
+    target_points_flat_ = this->get_parameter("target_points").as_double_array();
 
     // * Input topics
     camera_topic_      = this->get_parameter("camera_topic").as_string();
@@ -64,12 +64,16 @@ PoseEstimatorNode::PoseEstimatorNode()
         marker_ids_int.push_back(static_cast<int>(id));
     }
 
-    // * Reshape point_offsets from flat list to Nx3
-    std::vector<std::vector<float>> point_offsets;
-    for (size_t i = 0; i < point_offsets_flat_.size(); i += 3) {
-        point_offsets.push_back({static_cast<float>(point_offsets_flat_[i]),
-                                 static_cast<float>(point_offsets_flat_[i + 1]),
-                                 static_cast<float>(point_offsets_flat_[i + 2])});
+    // * Convert target_points_flat_ to TargetPoint vector
+    for (size_t i = 0; i < target_points_flat_.size() / 6; i++) {
+        TargetPoint target_point;
+        target_point.position(0)     = static_cast<float>(target_points_flat_[i * 6]);
+        target_point.position(1)     = static_cast<float>(target_points_flat_[i * 6 + 1]);
+        target_point.position(2)     = static_cast<float>(target_points_flat_[i * 6 + 2]);
+        target_point.rotation_rpy(0) = static_cast<float>(target_points_flat_[i * 6 + 3]);
+        target_point.rotation_rpy(1) = static_cast<float>(target_points_flat_[i * 6 + 4]);
+        target_point.rotation_rpy(2) = static_cast<float>(target_points_flat_[i * 6 + 5]);
+        target_points_.push_back(target_point);
     }
 
     // ---------- Initialize Components ----------
@@ -116,7 +120,7 @@ PoseEstimatorNode::PoseEstimatorNode()
                     .c_str());
     RCLCPP_INFO(this->get_logger(), "  Tag family: %s", tag_family_.c_str());
     RCLCPP_INFO(this->get_logger(), "  Tag size: %.5f m", tag_size_);
-    RCLCPP_INFO(this->get_logger(), "  Target points: %zu", point_offsets.size());
+    RCLCPP_INFO(this->get_logger(), "  Target points: %zu", target_points_.size());
 }
 
 // ========================================================================
@@ -142,14 +146,6 @@ void PoseEstimatorNode::cameraInfoCallback(const sensor_msgs::msg::CameraInfo::S
         }
     }
 
-    // Reshape point_offsets from flat list to Nx3
-    std::vector<std::vector<float>> point_offsets;
-    for (size_t i = 0; i < point_offsets_flat_.size(); i += 3) {
-        point_offsets.push_back({static_cast<float>(point_offsets_flat_[i]),
-                                 static_cast<float>(point_offsets_flat_[i + 1]),
-                                 static_cast<float>(point_offsets_flat_[i + 2])});
-    }
-
     // Convert marker offsets
     std::vector<float> marker_offsets_float;
     for (auto offset : marker_offsets_) {
@@ -166,7 +162,7 @@ void PoseEstimatorNode::cameraInfoCallback(const sensor_msgs::msg::CameraInfo::S
     estimator_ = std::make_unique<MultiTagPoseEstimator>(
         marker_ids_int,
         marker_offsets_float,
-        point_offsets,
+        target_points_,
         tag_size_,
         camera_matrix_,
         dist_coeffs_,

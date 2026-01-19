@@ -9,16 +9,16 @@ namespace apriltag_pose_estimator {
 // Constructor
 // ========================================================================
 MultiTagPoseEstimator::MultiTagPoseEstimator(
-    const std::vector<int>&                marker_ids,
-    const std::vector<float>&              marker_offsets,
-    const std::vector<std::vector<float>>& point_offsets,
-    float                                  tag_size,
-    const cv::Mat&                         camera_matrix,
-    const cv::Mat&                         dist_coeffs,
-    int                                    base_marker_id)
+    const std::vector<int>&         marker_ids,
+    const std::vector<float>&       marker_offsets,
+    const std::vector<TargetPoint>& target_points,
+    float                           tag_size,
+    const cv::Mat&                  camera_matrix,
+    const cv::Mat&                  dist_coeffs,
+    int                             base_marker_id)
     : marker_ids_(marker_ids),
-      point_offsets_(point_offsets),
-      point_count_(point_offsets.size()),
+      target_points_(target_points),
+      target_point_count_(target_points.size()),
       tag_size_(tag_size),
       camera_matrix_(camera_matrix.clone()),
       dist_coeffs_(dist_coeffs.clone()) {
@@ -100,24 +100,39 @@ bool MultiTagPoseEstimator::estimate(
     }
 
     // 6. Convert to 4x4 transformation matrix
-    Eigen::Matrix4f T               = rvecTvecToMatrix(rvec, tvec);
-    Eigen::Matrix3f marker_rotation = T.block<3, 3>(0, 0);
-    Eigen::Vector3f marker_position = T.block<3, 1>(0, 3);
+    Eigen::Matrix4f T_cam_2_marker = rvecTvecToMatrix(rvec, tvec);
 
     // 7. Compute point poses and project them onto the image
     point_transforms.clear();
-    point_transforms.reserve(point_offsets_.size());  // Pre-allocate memory
+    point_transforms.reserve(target_points_.size());  // Pre-allocate memory
 
-    for (size_t i = 0; i < point_offsets_.size(); i++) {
-        Eigen::Vector3f offset_vec(
-            point_offsets_[i][0],
-            point_offsets_[i][1],
-            point_offsets_[i][2]);
+    for (size_t i = 0; i < target_points_.size(); i++) {
+        // 7.0 Target point pose in marker frame
+        Eigen::Vector3f t_offset(
+            target_points_[i].position(0),
+            target_points_[i].position(1),
+            target_points_[i].position(2));
+        Eigen::AngleAxisf roll(
+            target_points_[i].rotation_rpy(0),
+            Eigen::Vector3f::UnitX());
+        Eigen::AngleAxisf pitch(
+            target_points_[i].rotation_rpy(1),
+            Eigen::Vector3f::UnitY());
+        Eigen::AngleAxisf yaw(
+            target_points_[i].rotation_rpy(2),
+            Eigen::Vector3f::UnitZ());
 
-        Eigen::Vector3f obj_pos = marker_position + marker_rotation * offset_vec;
+        Eigen::Matrix3f R_offset = roll.matrix() * pitch.matrix() * yaw.matrix();
 
-        // 7.1 Project the 3D point position into image plane
-        Eigen::Vector3f pos_cam = obj_pos;
+        Eigen::Matrix4f T_marker_2_target_point   = Eigen::Matrix4f::Identity();
+        T_marker_2_target_point.block<3, 3>(0, 0) = R_offset;
+        T_marker_2_target_point.block<3, 1>(0, 3) = t_offset;
+
+        // 7.1 Target point pose in camera frame
+        Eigen::Matrix4f T_camera_2_target_point = T_cam_2_marker * T_marker_2_target_point;
+        Eigen::Vector3f pos_cam                 = T_camera_2_target_point.block<3, 1>(0, 3);
+
+        // 7.2 Image projection
         Eigen::Vector3f img_point_eigen;
         img_point_eigen(0) = camera_matrix_.at<double>(0, 0) * pos_cam(0) +
                              camera_matrix_.at<double>(0, 2) * pos_cam(2);
@@ -128,7 +143,7 @@ bool MultiTagPoseEstimator::estimate(
         if (img_point_eigen(2) > 0) {
             img_point_eigen /= img_point_eigen(2);
 
-            // 7.2 Draw white circle with black border
+            // 7.3 Draw white circle with black border
             cv::Point img_point(
                 static_cast<int>(img_point_eigen(0)),
                 static_cast<int>(img_point_eigen(1)));
@@ -136,10 +151,8 @@ bool MultiTagPoseEstimator::estimate(
             cv::circle(img, img_point, 5, cv::Scalar(0, 0, 0), 2);         // Black border
         }
 
-        // 7.3 Store the transformation matrix for this point
-        Eigen::Matrix4f obj_T   = T;
-        obj_T.block<3, 1>(0, 3) = obj_pos;
-        point_transforms.push_back(obj_T);
+        // 7.4 Store the transformation matrix for this point
+        point_transforms.push_back(T_camera_2_target_point);
     }
 
     // 8. Visualize the base marker pose using axes

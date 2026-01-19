@@ -13,6 +13,11 @@ struct TagDetection {
     std::vector<cv::Point2f> corners;  // Corner points in image coordinates
 };
 
+struct TargetPoint {
+    Eigen::Vector3f position;      // Position (x, y, z)
+    Eigen::Vector3f rotation_rpy;  // Rotation (roll, pitch, yaw) in radians
+};
+
 }  // namespace apriltag_pose_estimator
 
 #endif  // APRILTAG_POSE_ESTIMATOR__TAG_CONFIG_HPP_

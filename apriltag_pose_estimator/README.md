@@ -43,7 +43,7 @@ AprilTag 기반 다중 타겟 포즈 추정 C++ 패키지입니다.
 | `tag_size` | double | `0.02778` | AprilTag 크기 (m, 27.78mm) |
 | `tag_family` | string | `"tagStandard41h12"` | AprilTag family (tag36h11, tagStandard41h12 등) |
 | `marker_offsets` | list[double] | `[0.065, 0.0]` | 마커 간 오프셋 [X, Y] (m) |
-| `point_offsets` | list[double] | `[2개 포인트]` | 타겟 포인트 오프셋 (Nx3 flat list, m) |
+| `point_offsets` | list[double] | `[2개 포인트]` | 타겟 포인트 오프셋 (Nx6 flat list, m, radian) |
 
 #### Topics
 | Parameter | Type | Default | Description |
