@@ -1,0 +1,8 @@
+# Service to get target points pose from latest detection
+
+# Request (empty - just triggers pose retrieval)
+---
+# Response
+bool success                            # Whether poses are available
+string message                          # Status message
+geometry_msgs/PoseArray poses           # Target points pose in camera frame

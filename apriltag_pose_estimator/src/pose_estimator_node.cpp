@@ -27,12 +27,7 @@ PoseEstimatorNode::PoseEstimatorNode()
     this->declare_parameter("camera_info_topic", "realsense_node/color/camera_info");
     this->declare_parameter("camera_frame", "camera_color_optical_frame");
     // * Output topics
-    this->declare_parameter("pose_topic", "pose_estimator_node/target_poses");
-    this->declare_parameter("detection_image_topic", "pose_estimator_node/detection_image");
-    this->declare_parameter("marker_topic", "visualization_markers");
-    // * Publishing flags
-    this->declare_parameter("publish_visualization", true);
-    this->declare_parameter("publish_detection_image", true);
+    this->declare_parameter("tag_detection_topic", "pose_estimator_node/tag_detections");
 
     // ---------- Get Parameters ----------
     // * AprilTag configuration
@@ -49,13 +44,7 @@ PoseEstimatorNode::PoseEstimatorNode()
     camera_frame_      = this->get_parameter("camera_frame").as_string();
 
     // * Output topics
-    pose_topic_            = this->get_parameter("pose_topic").as_string();
-    detection_image_topic_ = this->get_parameter("detection_image_topic").as_string();
-    marker_topic_          = this->get_parameter("marker_topic").as_string();
-
-    // * Publishing flags
-    publish_visualization_   = this->get_parameter("publish_visualization").as_bool();
-    publish_detection_image_ = this->get_parameter("publish_detection_image").as_bool();
+    tag_detection_topic_ = this->get_parameter("tag_detection_topic").as_string();
 
     // ---------- Data Conversion ----------
     // * Convert marker_ids to int vector
@@ -92,16 +81,16 @@ PoseEstimatorNode::PoseEstimatorNode()
         std::bind(&PoseEstimatorNode::cameraInfoCallback, this, std::placeholders::_1));
 
     // ---------- Create publishers ----------
-    pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseArray>(pose_topic_, 10);
+    tag_detection_pub_ = this->create_publisher<apriltag_pose_estimator_msgs::msg::TagDetection>(
+        tag_detection_topic_, 10);
 
-    if (publish_visualization_) {
-        marker_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(
-            marker_topic_, 10);
-    }
-
-    if (publish_detection_image_) {
-        detection_pub_ = this->create_publisher<sensor_msgs::msg::Image>(detection_image_topic_, 10);
-    }
+    // ADDED: Service server for pose estimation
+    pose_service_ = this->create_service<apriltag_pose_estimator_msgs::srv::TargetPointsPose>(
+        "get_target_poses",
+        std::bind(&PoseEstimatorNode::targetPointPoseServcieCallback,
+                  this,
+                  std::placeholders::_1,
+                  std::placeholders::_2));
 
     // ---------- Initialize camera distortion coefficients ----------
     dist_coeffs_ = cv::Mat::zeros(5, 1, CV_64F);
@@ -121,6 +110,7 @@ PoseEstimatorNode::PoseEstimatorNode()
     RCLCPP_INFO(this->get_logger(), "  Tag family: %s", tag_family_.c_str());
     RCLCPP_INFO(this->get_logger(), "  Tag size: %.5f m", tag_size_);
     RCLCPP_INFO(this->get_logger(), "  Target points: %zu", target_points_.size());
+    RCLCPP_INFO(this->get_logger(), "  Service: get_target_poses");  // ADDED
 }
 
 // ========================================================================
@@ -226,8 +216,11 @@ void PoseEstimatorNode::imageCallback(const sensor_msgs::msg::Image::SharedPtr m
     }
 
     // Estimate poses using multi-tag estimator
-    std::vector<Eigen::Matrix4f> point_transforms;
-    bool                         success = estimator_->estimate(tags, vis_image, point_transforms);
+    std::vector<Eigen::Matrix4f> target_point_transforms;
+    cv::Mat                      rvec = cv::Mat::zeros(3, 1, CV_64F);
+    cv::Mat                      tvec = cv::Mat::zeros(3, 1, CV_64F);
+
+    bool success = estimator_->estimate(tags, vis_image, rvec, tvec, target_point_transforms);
 
     if (!success) {
         if (detection_active_) {
@@ -239,68 +232,78 @@ void PoseEstimatorNode::imageCallback(const sensor_msgs::msg::Image::SharedPtr m
 
     detection_active_ = true;
 
-    // Publish poses
-    publishPoses(point_transforms, msg->header.stamp);
-
-    // Publish visualization
-    if (publish_visualization_) {
-        publishVisualization(point_transforms, msg->header.stamp);
+    // Store latest detection results for service response
+    {
+        std::lock_guard<std::mutex> lock(detection_mutex_);
+        latest_rvec_       = rvec;
+        latest_tvec_       = tvec;
+        latest_transforms_ = target_point_transforms;
+        latest_timestamp_  = msg->header.stamp;
     }
 
-    // Publish detection image
-    if (publish_detection_image_) {
-        auto detection_msg = cv_bridge::CvImage(msg->header, "bgr8", vis_image).toImageMsg();
-        detection_pub_->publish(*detection_msg);
+    // Publish tag detection info (dist_coeffs, rvec, tvec, tag_size)
+    publishTagDetection();
+}
+
+// Service callback for getting target poses
+void PoseEstimatorNode::targetPointPoseServcieCallback(
+    std::shared_ptr<apriltag_pose_estimator_msgs::srv::TargetPointsPose::Request>  request,
+    std::shared_ptr<apriltag_pose_estimator_msgs::srv::TargetPointsPose::Response> response) {
+    std::lock_guard<std::mutex> lock(detection_mutex_);
+
+    (void)request;
+
+    if (latest_transforms_.empty()) {
+        response->success = false;
+        response->message = "No valid pose estimation available";
+        RCLCPP_WARN(this->get_logger(), "Service called but no poses available");
+        return;
     }
+
+    // Fill response with latest poses
+    response->poses.header.stamp    = latest_timestamp_;
+    response->poses.header.frame_id = camera_frame_;
+
+    for (const auto& transform : latest_transforms_) {
+        response->poses.poses.push_back(matrixToPose(transform));
+    }
+
+    response->success = true;
+    response->message = "Poses retrieved successfully";
+
+    RCLCPP_INFO(this->get_logger(), "Service: Returned %zu target poses",
+                latest_transforms_.size());
 }
 
 // ========================================================================
 // Publishing Functions
 // ========================================================================
-void PoseEstimatorNode::publishPoses(
-    const std::vector<Eigen::Matrix4f>& transforms,
-    const rclcpp::Time&                 timestamp) {
-    geometry_msgs::msg::PoseArray pose_array;
-    pose_array.header.stamp    = timestamp;
-    pose_array.header.frame_id = camera_frame_;
+void PoseEstimatorNode::publishTagDetection() {
+    apriltag_pose_estimator_msgs::msg::TagDetection detection_msg;
 
-    for (const auto& transform : transforms) {
-        pose_array.poses.push_back(matrixToPose(transform));
+    detection_msg.tag_size = tag_size_;
+
+    // -------- camera matrix (3x3) --------
+    for (int r = 0; r < 3; r++) {
+        for (int c = 0; c < 3; c++) {
+            detection_msg.camera_matrix[r * 3 + c] =
+                camera_matrix_.at<double>(r, c);
+        }
     }
 
-    pose_pub_->publish(pose_array);
-}
-
-void PoseEstimatorNode::publishVisualization(
-    const std::vector<Eigen::Matrix4f>& transforms,
-    const rclcpp::Time&                 timestamp) {
-    visualization_msgs::msg::MarkerArray marker_array;
-
-    for (size_t i = 0; i < transforms.size(); i++) {
-        visualization_msgs::msg::Marker marker;
-        marker.header.stamp    = timestamp;
-        marker.header.frame_id = camera_frame_;
-        marker.ns              = "target_points";
-        marker.id              = i;
-        marker.type            = visualization_msgs::msg::Marker::SPHERE;
-        marker.action          = visualization_msgs::msg::Marker::ADD;
-
-        auto pose   = matrixToPose(transforms[i]);
-        marker.pose = pose;
-
-        marker.scale.x = 0.02;
-        marker.scale.y = 0.02;
-        marker.scale.z = 0.02;
-
-        marker.color.r = 1.0;
-        marker.color.g = 0.0;
-        marker.color.b = 0.0;
-        marker.color.a = 1.0;
-
-        marker_array.markers.push_back(marker);
+    // -------- distortion coefficients --------
+    detection_msg.dist_coeffs.resize(dist_coeffs_.rows);
+    for (int i = 0; i < dist_coeffs_.rows; i++) {
+        detection_msg.dist_coeffs[i] = dist_coeffs_.at<double>(i, 0);
     }
 
-    marker_pub_->publish(marker_array);
+    // -------- rvec / tvec --------
+    for (int i = 0; i < 3; i++) {
+        detection_msg.rvec[i] = latest_rvec_.at<double>(i);
+        detection_msg.tvec[i] = latest_tvec_.at<double>(i);
+    }
+
+    tag_detection_pub_->publish(detection_msg);
 }
 
 // ========================================================================

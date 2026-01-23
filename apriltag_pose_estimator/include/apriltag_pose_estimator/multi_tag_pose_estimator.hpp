@@ -28,9 +28,11 @@ class MultiTagPoseEstimator {
     // Pose Estimation Functions
     // ========================================================================
     bool estimate(
-        const std::vector<TagDetection>& tags,             // Detected AprilTags
-        cv::Mat&                         img,              // Image to draw on
-        std::vector<Eigen::Matrix4f>&    point_transforms  // Output: point transforms
+        const std::vector<TagDetection>& tags,                    // Detected AprilTags
+        cv::Mat&                         img,                     // Image to draw on
+        cv::Mat&                         rvec,                    // Rotation vector
+        cv::Mat&                         tvec,                    // Translation vector
+        std::vector<Eigen::Matrix4f>&    target_point_transforms  // Output: target point transforms
     );
 
    private:
