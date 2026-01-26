@@ -16,7 +16,7 @@
 #include "apriltag_pose_estimator/multi_tag_pose_estimator.hpp"
 #include "apriltag_pose_estimator/tag_config.hpp"
 #include "apriltag_pose_estimator_msgs/msg/tag_detection.hpp"
-#include "apriltag_pose_estimator_msgs/srv/target_points_pose.hpp"
+#include "apriltag_pose_estimator_msgs/srv/target_point_pose.hpp"
 
 namespace apriltag_pose_estimator {
 
@@ -41,9 +41,9 @@ class PoseEstimatorNode : public rclcpp::Node {
     );
 
     // * Services Servers
-    void targetPointPoseServcieCallback(
-        std::shared_ptr<apriltag_pose_estimator_msgs::srv::TargetPointsPose::Request>  request,
-        std::shared_ptr<apriltag_pose_estimator_msgs::srv::TargetPointsPose::Response> response);
+    void targetPointPoseServiceCallback(
+        std::shared_ptr<apriltag_pose_estimator_msgs::srv::TargetPointPose::Request>  request,
+        std::shared_ptr<apriltag_pose_estimator_msgs::srv::TargetPointPose::Response> response);
 
     // ========================================================================
     // Publishers
@@ -74,7 +74,7 @@ class PoseEstimatorNode : public rclcpp::Node {
     rclcpp::Publisher<apriltag_pose_estimator_msgs::msg::TagDetection>::SharedPtr tag_detection_pub_;
 
     // Services
-    rclcpp::Service<apriltag_pose_estimator_msgs::srv::TargetPointsPose>::SharedPtr pose_service_;
+    rclcpp::Service<apriltag_pose_estimator_msgs::srv::TargetPointPose>::SharedPtr target_point_pose_server_;
 
     // ========================================================================
     // Camera Info
@@ -103,17 +103,23 @@ class PoseEstimatorNode : public rclcpp::Node {
     std::string tag_detection_topic_;  // Tag detection info topic
 
     // ========================================================================
+    // Service Names
+    // ========================================================================
+    std::string target_point_pose_service_;  // Target point pose service name
+
+    // ========================================================================
     // State
     // ========================================================================
     bool             detection_active_;   // Detection active flag
     std::vector<int> last_detected_ids_;  // Last detected tag IDs
 
     // Latest detection results for service
-    std::mutex                   detection_mutex_;    // Mutex for thread-safe access
-    std::vector<Eigen::Matrix4f> latest_transforms_;  // Latest target point transforms
-    cv::Mat                      latest_rvec_;        // Latest rotation vector
-    cv::Mat                      latest_tvec_;        // Latest translation vector
-    rclcpp::Time                 latest_timestamp_;   // Latest detection timestamp
+    std::mutex                   detection_mutex_;      // Mutex for thread-safe access
+    bool                         latest_tag_detected_;  // Latest tag detected flag
+    cv::Mat                      latest_rvec_;          // Latest rotation vector
+    cv::Mat                      latest_tvec_;          // Latest translation vector
+    std::vector<Eigen::Matrix4f> latest_transforms_;    // Latest target point transforms
+    rclcpp::Time                 latest_timestamp_;     // Latest detection timestamp
 };
 
 }  // namespace apriltag_pose_estimator

@@ -30,7 +30,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   # Messages
   "msg/TagDetection.msg"
   # Services
-  "srv/TargetPointsPose.srv"
+  "srv/TargetPointPose.srv"
   DEPENDENCIES std_msgs geometry_msgs builtin_interfaces
 )
 

@@ -28,6 +28,8 @@ PoseEstimatorNode::PoseEstimatorNode()
     this->declare_parameter("camera_frame", "camera_color_optical_frame");
     // * Output topics
     this->declare_parameter("tag_detection_topic", "pose_estimator_node/tag_detections");
+    // * Service server
+    this->declare_parameter("target_point_pose_service", "pose_estimator_node/target_point_pose");
 
     // ---------- Get Parameters ----------
     // * AprilTag configuration
@@ -45,6 +47,9 @@ PoseEstimatorNode::PoseEstimatorNode()
 
     // * Output topics
     tag_detection_topic_ = this->get_parameter("tag_detection_topic").as_string();
+
+    // * Service server
+    target_point_pose_service_ = this->get_parameter("target_point_pose_service").as_string();
 
     // ---------- Data Conversion ----------
     // * Convert marker_ids to int vector
@@ -84,10 +89,10 @@ PoseEstimatorNode::PoseEstimatorNode()
     tag_detection_pub_ = this->create_publisher<apriltag_pose_estimator_msgs::msg::TagDetection>(
         tag_detection_topic_, 10);
 
-    // ADDED: Service server for pose estimation
-    pose_service_ = this->create_service<apriltag_pose_estimator_msgs::srv::TargetPointsPose>(
-        "get_target_poses",
-        std::bind(&PoseEstimatorNode::targetPointPoseServcieCallback,
+    // ---------- Service server ----------
+    target_point_pose_server_ = this->create_service<apriltag_pose_estimator_msgs::srv::TargetPointPose>(
+        target_point_pose_service_,
+        std::bind(&PoseEstimatorNode::targetPointPoseServiceCallback,
                   this,
                   std::placeholders::_1,
                   std::placeholders::_2));
@@ -110,7 +115,7 @@ PoseEstimatorNode::PoseEstimatorNode()
     RCLCPP_INFO(this->get_logger(), "  Tag family: %s", tag_family_.c_str());
     RCLCPP_INFO(this->get_logger(), "  Tag size: %.5f m", tag_size_);
     RCLCPP_INFO(this->get_logger(), "  Target points: %zu", target_points_.size());
-    RCLCPP_INFO(this->get_logger(), "  Service: get_target_poses");  // ADDED
+    RCLCPP_INFO(this->get_logger(), "  Target point pose service: %s", target_point_pose_service_.c_str());
 }
 
 // ========================================================================
@@ -193,6 +198,14 @@ void PoseEstimatorNode::imageCallback(const sensor_msgs::msg::Image::SharedPtr m
             RCLCPP_WARN(this->get_logger(), "No AprilTags detected");
             detection_active_ = false;
             last_detected_ids_.clear();
+            {
+                std::lock_guard<std::mutex> lock(detection_mutex_);
+                latest_tag_detected_ = false;
+                latest_rvec_         = cv::Mat::zeros(3, 1, CV_64F);
+                latest_tvec_         = cv::Mat::zeros(3, 1, CV_64F);
+                latest_transforms_.clear();
+            }
+            publishTagDetection();
         }
         return;
     }
@@ -226,6 +239,15 @@ void PoseEstimatorNode::imageCallback(const sensor_msgs::msg::Image::SharedPtr m
         if (detection_active_) {
             RCLCPP_WARN(this->get_logger(), "Pose estimation failed - not all required markers detected");
             detection_active_ = false;
+            last_detected_ids_.clear();
+            {
+                std::lock_guard<std::mutex> lock(detection_mutex_);
+                latest_tag_detected_ = false;
+                latest_rvec_         = cv::Mat::zeros(3, 1, CV_64F);
+                latest_tvec_         = cv::Mat::zeros(3, 1, CV_64F);
+                latest_transforms_.clear();
+            }
+            publishTagDetection();
         }
         return;
     }
@@ -235,10 +257,11 @@ void PoseEstimatorNode::imageCallback(const sensor_msgs::msg::Image::SharedPtr m
     // Store latest detection results for service response
     {
         std::lock_guard<std::mutex> lock(detection_mutex_);
-        latest_rvec_       = rvec;
-        latest_tvec_       = tvec;
-        latest_transforms_ = target_point_transforms;
-        latest_timestamp_  = msg->header.stamp;
+        latest_tag_detected_ = true;
+        latest_rvec_         = rvec;
+        latest_tvec_         = tvec;
+        latest_transforms_   = target_point_transforms;
+        latest_timestamp_    = msg->header.stamp;
     }
 
     // Publish tag detection info (dist_coeffs, rvec, tvec, tag_size)
@@ -246,21 +269,34 @@ void PoseEstimatorNode::imageCallback(const sensor_msgs::msg::Image::SharedPtr m
 }
 
 // Service callback for getting target poses
-void PoseEstimatorNode::targetPointPoseServcieCallback(
-    std::shared_ptr<apriltag_pose_estimator_msgs::srv::TargetPointsPose::Request>  request,
-    std::shared_ptr<apriltag_pose_estimator_msgs::srv::TargetPointsPose::Response> response) {
+void PoseEstimatorNode::targetPointPoseServiceCallback(
+    std::shared_ptr<apriltag_pose_estimator_msgs::srv::TargetPointPose::Request>  request,
+    std::shared_ptr<apriltag_pose_estimator_msgs::srv::TargetPointPose::Response> response) {
+    //
     std::lock_guard<std::mutex> lock(detection_mutex_);
 
-    (void)request;
-
+    // No poses available
     if (latest_transforms_.empty()) {
         response->success = false;
-        response->message = "No valid pose estimation available";
+        response->message = "No valid target point poses available";
         RCLCPP_WARN(this->get_logger(), "Service called but no poses available");
         return;
     }
 
+    // Reject if no detection newer than request_time
+    if (latest_timestamp_ < request->request_time) {
+        response->success = false;
+        response->message = "No detection newer than request_time";
+        RCLCPP_WARN(
+            this->get_logger(),
+            "Service rejected: request_time=%.9d, latest_detection=%.9f",
+            request->request_time.sec,
+            latest_timestamp_.seconds());
+        return;
+    }
+
     // Fill response with latest poses
+    response->data_time             = latest_timestamp_;
     response->poses.header.stamp    = latest_timestamp_;
     response->poses.header.frame_id = camera_frame_;
 
@@ -269,9 +305,9 @@ void PoseEstimatorNode::targetPointPoseServcieCallback(
     }
 
     response->success = true;
-    response->message = "Poses retrieved successfully";
+    response->message = "Target point pose retrieved successfully";
 
-    RCLCPP_INFO(this->get_logger(), "Service: Returned %zu target poses",
+    RCLCPP_INFO(this->get_logger(), "✅ Service: Returned %zu target poses",
                 latest_transforms_.size());
 }
 
@@ -281,7 +317,8 @@ void PoseEstimatorNode::targetPointPoseServcieCallback(
 void PoseEstimatorNode::publishTagDetection() {
     apriltag_pose_estimator_msgs::msg::TagDetection detection_msg;
 
-    detection_msg.tag_size = tag_size_;
+    detection_msg.tag_detected = latest_tag_detected_;
+    detection_msg.tag_size     = tag_size_;
 
     // -------- camera matrix (3x3) --------
     for (int r = 0; r < 3; r++) {
