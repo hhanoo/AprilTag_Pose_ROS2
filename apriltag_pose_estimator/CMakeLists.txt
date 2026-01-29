@@ -21,8 +21,8 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
-find_package(visualization_msgs REQUIRED)
 find_package(cv_bridge REQUIRED)
+find_package(apriltag_pose_estimator_msgs REQUIRED)
 
 # External libraries
 find_package(OpenCV REQUIRED)
@@ -64,8 +64,8 @@ ament_target_dependencies(pose_estimator_node
     rclcpp
     sensor_msgs
     geometry_msgs
-    visualization_msgs
     cv_bridge
+    apriltag_pose_estimator_msgs
 )
 target_link_libraries(pose_estimator_node
     ${PROJECT_NAME}_lib

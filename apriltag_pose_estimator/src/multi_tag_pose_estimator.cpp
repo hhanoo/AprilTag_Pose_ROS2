@@ -40,7 +40,9 @@ MultiTagPoseEstimator::MultiTagPoseEstimator(
 bool MultiTagPoseEstimator::estimate(
     const std::vector<TagDetection>& tags,
     cv::Mat&                         img,
-    std::vector<Eigen::Matrix4f>&    point_transforms) {
+    cv::Mat&                         rvec,
+    cv::Mat&                         tvec,
+    std::vector<Eigen::Matrix4f>&    target_point_transforms) {
     // 1. Make a dictionary for fast lookup: tag_id → tag
     std::map<int, TagDetection> tag_dict;
     for (const auto& tag : tags) {
@@ -92,8 +94,7 @@ bool MultiTagPoseEstimator::estimate(
     }
 
     // 5. Estimate camera pose using solvePnP
-    cv::Mat rvec, tvec;
-    bool    success = cv::solvePnP(pt3D, pt2D, camera_matrix_, dist_coeffs_, rvec, tvec);
+    bool success = cv::solvePnP(pt3D, pt2D, camera_matrix_, dist_coeffs_, rvec, tvec);
 
     if (!success) {
         return false;  // Pose estimation failed
@@ -103,8 +104,8 @@ bool MultiTagPoseEstimator::estimate(
     Eigen::Matrix4f T_cam_2_marker = rvecTvecToMatrix(rvec, tvec);
 
     // 7. Compute point poses and project them onto the image
-    point_transforms.clear();
-    point_transforms.reserve(target_points_.size());  // Pre-allocate memory
+    target_point_transforms.clear();
+    target_point_transforms.reserve(target_points_.size());  // Pre-allocate memory
 
     for (size_t i = 0; i < target_points_.size(); i++) {
         // 7.0 Target point pose in marker frame
@@ -152,7 +153,7 @@ bool MultiTagPoseEstimator::estimate(
         }
 
         // 7.4 Store the transformation matrix for this point
-        point_transforms.push_back(T_camera_2_target_point);
+        target_point_transforms.push_back(T_camera_2_target_point);
     }
 
     // 8. Visualize the base marker pose using axes

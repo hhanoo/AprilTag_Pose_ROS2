@@ -1,0 +1,52 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>apriltag_pose_estimator_msgs</name>
+  <version>1.0.0</version>
+  <description>AprilTag-based multi-target pose estimator messages</description>
+
+  <maintainer email="woo980711@gmail.com">hhanoo</maintainer>
+  
+  <license>MIT</license>
+
+  <!-- ========================================================= -->
+  <!-- Build tool dependencies -->
+  <!-- ========================================================= -->
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <!-- * Interface code generation tools (인터페이스 코드 생성 도구) -->
+  <build_depend>rosidl_default_generators</build_depend>
+
+  <!-- ========================================================= -->
+  <!-- Interface dependencies (인터페이스 의존성) -->
+  <!-- These message types are used in our custom interfaces -->
+  <!-- ========================================================= -->
+  <!-- * Standard ROS 2 message types (기본 ROS 2 메시지 타입) -->
+  <depend>std_msgs</depend>
+  <!-- * Geometry-related message types (Pose, PoseArray, etc.) (기하학적 관련 메시지 타입) -->
+  <depend>geometry_msgs</depend>
+
+  <!-- ========================================================= -->
+  <!-- Runtime dependencies (실행 시 필요한 의존성) -->
+  <!-- ========================================================= -->
+  <!-- * Runtime support for generated interfaces -->
+  <exec_depend>rosidl_default_runtime</exec_depend>
+
+  <!-- ========================================================= -->
+  <!-- Interface package group membership (인터페이스 패키지 그룹 멤버십) -->
+  <!-- ========================================================= -->
+  <member_of_group>rosidl_interface_packages</member_of_group>
+
+  <!-- ========================================================= -->
+  <!-- Test dependencies -->
+  <!-- ========================================================= -->
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <!-- ========================================================= -->
+  <!-- Export build type -->
+  <!-- ========================================================= -->
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

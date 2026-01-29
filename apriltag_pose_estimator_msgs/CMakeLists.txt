@@ -1,0 +1,55 @@
+cmake_minimum_required(VERSION 3.8)
+project(apriltag_pose_estimator_msgs)
+
+# =========================================================
+# Compiler options
+# =========================================================
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
+
+# =========================================================
+# Dependencies
+# =========================================================
+# * Core ROS2 build system
+find_package(ament_cmake REQUIRED)
+
+# * Interface generation
+find_package(rosidl_default_generators REQUIRED)
+
+# * Message dependencies
+find_package(std_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(builtin_interfaces REQUIRED)
+
+# =========================================================
+# Interface Generation
+# - Generate custom messages, services, and actions
+# =========================================================
+rosidl_generate_interfaces(${PROJECT_NAME}
+  # Messages
+  "msg/TagDetection.msg"
+  # Services
+  "srv/TargetPointPose.srv"
+  DEPENDENCIES std_msgs geometry_msgs builtin_interfaces
+)
+
+# =========================================================
+# Testing
+# =========================================================
+if(BUILD_TESTING)
+  find_package(ament_lint_auto REQUIRED)
+  # the following line skips the linter which checks for copyrights
+  # comment the line when a copyright and license is added to all source files
+  set(ament_cmake_copyright_FOUND TRUE)
+  # the following line skips cpplint (only works in a git repo)
+  # comment the line when this package is in a git repo and when
+  # a copyright and license is added to all source files
+  set(ament_cmake_cpplint_FOUND TRUE)
+  ament_lint_auto_find_test_dependencies()
+endif()
+
+# =========================================================
+# Package declaration
+# =========================================================
+ament_package()
