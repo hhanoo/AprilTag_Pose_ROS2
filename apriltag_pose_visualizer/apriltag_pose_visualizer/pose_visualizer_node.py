@@ -97,6 +97,28 @@ class PoseVisualizerNode(Node):
         rvec = np.array(pose.rvec, dtype=np.float64).reshape(3, 1)
         tvec = np.array(pose.tvec, dtype=np.float64).reshape(3, 1)
 
+        # ---------------------------------------------
+        # Convert rvec to roll, pitch, yaw (degrees)
+        # ---------------------------------------------
+        R, _ = cv2.Rodrigues(rvec)  # rotation matrix
+
+        sy = np.sqrt(R[0, 0] * R[0, 0] + R[1, 0] * R[1, 0])
+        singular = sy < 1e-6
+
+        if not singular:
+            roll = np.arctan2(R[2, 1], R[2, 2])
+            pitch = np.arctan2(-R[2, 0], sy)
+            yaw = np.arctan2(R[1, 0], R[0, 0])
+        else:
+            roll = np.arctan2(-R[1, 2], R[1, 1])
+            pitch = np.arctan2(-R[2, 0], sy)
+            yaw = 0.0
+
+        # Convert to degrees
+        roll_deg = np.degrees(roll)
+        pitch_deg = np.degrees(pitch)
+        yaw_deg = np.degrees(yaw)
+
         # --------------------------------------------------
         # Draw coordinate frame
         # --------------------------------------------------
@@ -120,6 +142,19 @@ class PoseVisualizerNode(Node):
             cv2.putText(
                 img,
                 f"t{label}: {tvec[i,0]:.4f} m",
+                (20, txt_y),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (255, 255, 255),
+                2,
+                cv2.LINE_AA,
+            )
+            txt_y += 30
+
+        for label in ["roll", "pitch", "yaw"]:
+            cv2.putText(
+                img,
+                f"{label}: {eval(label + '_deg'):.4f} deg",
                 (20, txt_y),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.7,
