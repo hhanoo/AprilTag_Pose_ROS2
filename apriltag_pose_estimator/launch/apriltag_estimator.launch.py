@@ -71,28 +71,10 @@ def launch_setup(context):
     )
 
     # =========================================================
-    # Visualization Tools
-    # =========================================================
-    # rqt_image_view for detection image
-    detection_viewer = ExecuteProcess(
-        condition=IfCondition(show_detection),
-        cmd=[
-            "ros2",
-            "run",
-            "rqt_image_view",
-            "rqt_image_view",
-            "/pose_estimator_node/detection_image",
-        ],
-        output="screen",
-        shell=False,
-    )
-
-    # =========================================================
     # Nodes to Start
     # =========================================================
     nodes_to_start = [
         pose_estimator_node,
-        detection_viewer,
     ]
 
     return nodes_to_start
