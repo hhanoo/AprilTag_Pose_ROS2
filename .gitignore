@@ -11,6 +11,8 @@ __pycache__/
 # C++
 build/
 .clang-format
+.clangd
+.cache/
 *.pro.user
 
 # Virtual environment
@@ -41,3 +43,6 @@ Thumbs.db
 build/
 install/
 log/
+
+# Prettier
+.prettierignore
