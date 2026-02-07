@@ -3,10 +3,11 @@
 **AprilTag 기반 실시간 6-DOF 포즈 추정 시스템**
 
 [![ROS2](https://img.shields.io/badge/ROS2-Humble-blue)](https://docs.ros.org/en/humble/)
-[![Python](https://img.shields.io/badge/Python-3.10+-green)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.10+-blue)](https://www.python.org/)
 [![C++](https://img.shields.io/badge/C++-17-blue)](https://isocpp.org/)
-[![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
-[![Docker](https://img.shields.io/badge/Docker-Ready-brightgreen)](docker/)
+[![License](https://img.shields.io/badge/License-MIT-orange)](LICENSE)
+[![Docker](https://img.shields.io/badge/Docker-Supported-brightgreen)](docker/)
+
 
 ## 📋 목차
 
