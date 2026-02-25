@@ -63,6 +63,40 @@ AprilTag 기반 다중 타겟 포즈 추정 C++ 패키지입니다.
 
 ## 사용 방법
 
+> ⚠️ **선행 조건**: `apriltag_estimator.launch.py`는 **포즈 추정 노드만** 실행합니다.
+> 카메라 드라이버를 **먼저** 별도 터미널에서 실행해야 합니다.
+>
+> ```bash
+> # 터미널 1: RealSense 카메라 먼저 실행
+> ros2 launch realsense2_camera rs_launch.py
+> ```
+>
+> **토픽 불일치 주의**: `realsense2_camera`의 기본 토픽은 `camera/camera/color/image_raw`이지만,
+> `pose_estimator.yaml`의 기본값은 `realsense_node/color/image_raw`입니다. 그대로 실행하면 연결되지 않습니다.
+>
+> **방법 A (권장): launch argument로 토픽 오버라이드**
+> ```bash
+> # 터미널 2: realsense2_camera 기본 토픽에 맞춰 실행
+> ros2 launch apriltag_pose_estimator apriltag_estimator.launch.py \
+>   camera_topic:=camera/camera/color/image_raw \
+>   camera_info_topic:=camera/camera/color/camera_info
+> ```
+>
+> **방법 B: ros2 run으로 토픽 리매핑**
+> ```bash
+> # 터미널 2: 토픽 리매핑으로 실행
+> ros2 run apriltag_pose_estimator pose_estimator_node --ros-args \
+>   -r realsense_node/color/image_raw:=camera/camera/color/image_raw \
+>   -r realsense_node/color/camera_info:=camera/camera/color/camera_info
+> ```
+>
+> **방법 C: YAML 직접 수정**
+> `config/pose_estimator.yaml`의 `camera_topic`, `camera_info_topic`을 실제 드라이버 토픽으로 변경한 뒤 실행:
+> ```bash
+> # 터미널 2:
+> ros2 launch apriltag_pose_estimator apriltag_estimator.launch.py
+> ```
+
 ### 1. 단독 실행
 
 ```bash
@@ -249,6 +283,30 @@ pose_estimator_node:
 ```
 
 ## 트러블슈팅
+
+### 카메라 데이터를 수신하지 못하는 경우
+
+**증상**: 노드가 실행되지만 아무 로그도 출력되지 않거나 `Waiting for camera data...` 상태 지속
+
+**원인**: 구독 토픽과 카메라 드라이버 퍼블리시 토픽이 불일치
+
+**확인 방법**:
+```bash
+# 실제 퍼블리시 중인 토픽 확인
+ros2 topic list | grep color
+
+# 노드가 구독 중인 토픽 확인
+ros2 node info /pose_estimator_node
+```
+
+**해결 방법**: 구독 토픽을 실제 드라이버 토픽에 맞춰 실행 (`realsense2_camera` 기본값 예시)
+```bash
+ros2 launch apriltag_pose_estimator apriltag_estimator.launch.py \
+  camera_topic:=camera/camera/color/image_raw \
+  camera_info_topic:=camera/camera/color/camera_info
+```
+
+---
 
 ### AprilTag가 검출되지 않는 경우
 

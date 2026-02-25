@@ -8,7 +8,6 @@
 [![License](https://img.shields.io/badge/License-MIT-orange)](LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-Supported-brightgreen)](docker/)
 
-
 ## 📋 목차
 
 - [데모](#데모)
@@ -42,7 +41,7 @@
               │ USB 3.0
               ▼
     ┌──────────────────────┐
-    │ realsense_bridge_py  │ (Python)
+    │ realsense2_camera    │ (C++)
     │ - Camera streaming   │
     │ - Intrinsics pub     │
     └──────────┬───────────┘
@@ -71,13 +70,10 @@
 
 ```
 Vision_Stack_ROS2/
-├── realsense_bridge_py/           # RealSense camera driver (Python)
-│   ├── realsense_bridge_py/
-│   │   └── realsense_node.py      # Camera streaming node
-│   ├── launch/
-│   │   └── realsense.launch.py    # Camera launch file
-│   └── config/
-│       └── realsense.yaml         # Camera configuration
+├── realsense-ros/                 # RealSense ROS2 driver (realsense2_camera)
+│   └── realsense2_camera/
+│       └── launch/
+│           └── rs_launch.py       # Camera launch file
 │
 ├── apriltag_pose_estimator/       # Pose estimator (C++)
 │   ├── src/
@@ -115,7 +111,7 @@ Vision Stack ROS2는 Intel RealSense 카메라와 AprilTag를 활용한 실시�
 
 ### 주요 구성요소
 
-- **realsense_bridge_py** (Python): Intel RealSense D435/D455 카메라 드라이버
+- **realsense2_camera** (C++): Intel RealSense D435/D455 공식 ROS2 드라이버 (`realsense-ros`)
 - **apriltag_pose_estimator** (C++): 고성능 AprilTag 검출 및 다중 마커 포즈 융합
 - **apriltag_pose_visualizer** (Python): 실시간 검출 결과 시각화 및 Roll/Pitch/Yaw 계산
 - **apriltag_pose_estimator_msgs**: ROS2 커스텀 메시지 및 서비스 인터페이스
@@ -165,7 +161,7 @@ colcon build
 source install/setup.bash
 
 # 터미널 1: RealSense 카메라 실행
-ros2 launch realsense_bridge_py realsense.launch.py
+ros2 launch realsense2_camera rs_launch.py
 
 # 터미널 2 (새 터미널): 포즈 추정기 실행
 ros2 launch apriltag_pose_estimator apriltag_estimator.launch.py
@@ -184,7 +180,7 @@ colcon build
 source install/setup.bash
 
 # 3. 실행
-ros2 launch realsense_bridge_py realsense.launch.py
+ros2 launch realsense2_camera rs_launch.py
 ros2 launch apriltag_pose_estimator apriltag_estimator.launch.py
 ```
 
@@ -351,11 +347,11 @@ source install/setup.bash
 
 ```
 Starting >>> apriltag_pose_estimator_msgs
-Starting >>> realsense_bridge_py
+Starting >>> realsense2_camera
 Finished <<< apriltag_pose_estimator_msgs [5.2s]
 Starting >>> apriltag_pose_estimator
 Starting >>> apriltag_pose_visualizer
-Finished <<< realsense_bridge_py [8.1s]
+Finished <<< realsense2_camera [8.1s]
 Finished <<< apriltag_pose_visualizer [8.3s]
 Finished <<< apriltag_pose_estimator [12.5s]
 
@@ -368,14 +364,21 @@ Summary: 4 packages finished
 
 ### Complete System Launch
 
-```bash
-# 터미널 1: RealSense 카메라 실행
-source ~/vision_ws/install/setup.bash
-ros2 launch realsense_bridge_py realsense.launch.py
+> ⚠️ **실행 순서 필수 준수**: `apriltag_estimator.launch.py`는 카메라를 포함하지 않습니다.
+> **반드시 터미널 1(카메라)을 먼저 실행**한 후 터미널 2(추정기)를 실행하세요.
 
-# 터미널 2: AprilTag 포즈 추정기 실행
+```bash
+# 터미널 1: RealSense 카메라 실행 (먼저 실행)
 source ~/vision_ws/install/setup.bash
-ros2 launch apriltag_pose_estimator apriltag_estimator.launch.py
+ros2 launch realsense2_camera rs_launch.py \
+  rgb_camera.color_profile:=1280x720x30 \
+  enable_depth:=false
+
+# 터미널 2: AprilTag 포즈 추정기 실행 (카메라 실행 후)
+source ~/vision_ws/install/setup.bash
+ros2 launch apriltag_pose_estimator apriltag_estimator.launch.py \
+  camera_topic:=camera/camera/color/image_raw \
+  camera_info_topic:=camera/camera/color/camera_info
 
 # 터미널 3 (선택): 시각화 노드 실행
 source ~/vision_ws/install/setup.bash
@@ -386,8 +389,8 @@ ros2 run apriltag_pose_visualizer pose_visualizer_node
 
 ```bash
 # 카메라 해상도 변경
-ros2 launch realsense_bridge_py realsense.launch.py \
-  width:=640 height:=480 frame_rate:=60
+ros2 launch realsense2_camera rs_launch.py \
+  rgb_camera.color_profile:=640x480x60
 
 # AprilTag 크기 및 family 변경
 ros2 launch apriltag_pose_estimator apriltag_estimator.launch.py \
@@ -408,7 +411,7 @@ cd ~/Vision_Stack_ROS2/docker
 
 # 컨테이너 내부에서
 colcon build && source install/setup.bash
-ros2 launch realsense_bridge_py realsense.launch.py
+ros2 launch realsense2_camera rs_launch.py
 ```
 
 ---
@@ -428,7 +431,7 @@ ros2 launch realsense_bridge_py realsense.launch.py
 
    ```bash
    # 카메라 스트리밍 시작
-   ros2 launch realsense_bridge_py realsense.launch.py
+   ros2 launch realsense2_camera rs_launch.py
 
    # 포즈 추정 시작
    ros2 launch apriltag_pose_estimator apriltag_estimator.launch.py
@@ -471,20 +474,13 @@ rviz2
 
 ### Camera Configuration
 
-[realsense_bridge_py/config/realsense.yaml](realsense_bridge_py/config/realsense.yaml) 편집:
+`realsense2_camera`는 launch 인수로 직접 파라미터를 전달합니다:
 
-```yaml
-realsense_node:
-  ros__parameters:
-    serial_number: "" # Empty for auto-detect
-    frame_rate: 30 # 15, 30, 60
-    resolution:
-      width: 1280 # 640, 1280, 1920
-      height: 720 # 480, 720, 1080
-    frame_ids:
-      color: "camera_color_optical_frame"
-    enable_depth: false # Set true for depth stream
-    auto_exposure: true
+```bash
+ros2 launch realsense2_camera rs_launch.py \
+  rgb_camera.color_profile:=1280x720x30 \
+  enable_depth:=false \
+  rgb_camera.enable_auto_exposure:=true
 ```
 
 ### Pose Estimator Configuration
@@ -541,7 +537,7 @@ pose_estimator_node:
 
 | Node Name              | Type   | Package                  | Description                  |
 | ---------------------- | ------ | ------------------------ | ---------------------------- |
-| `realsense_node`       | Python | realsense_bridge_py      | RealSense 카메라 스트리밍    |
+| `realsense_node`       | C++    | realsense2_camera        | RealSense 카메라 스트리밍    |
 | `pose_estimator_node`  | C++    | apriltag_pose_estimator  | AprilTag 검출 및 포즈 추정   |
 | `pose_visualizer_node` | Python | apriltag_pose_visualizer | 검출 결과 시각화 및 RPY 계산 |
 
