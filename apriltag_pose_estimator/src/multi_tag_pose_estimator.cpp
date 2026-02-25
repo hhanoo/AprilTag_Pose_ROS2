@@ -93,22 +93,67 @@ bool MultiTagPoseEstimator::estimate(
         pt2D.insert(pt2D.end(), corners.begin(), corners.end());
     }
 
-    // 5. Estimate camera pose using solvePnP
+    // 5. Estimate camera pose using solvePnP (Using SOLVEPNP_ITERATIVE)
     bool success = cv::solvePnP(pt3D, pt2D, camera_matrix_, dist_coeffs_, rvec, tvec);
 
     if (!success) {
         return false;  // Pose estimation failed
     }
 
-    // 6. Convert to 4x4 transformation matrix
-    Eigen::Matrix4f T_cam_2_marker = rvecTvecToMatrix(rvec, tvec);
+    // 6. Reprojection Error-based Outlier Rejection
+    // 추정된 pose로 3D 포인트를 이미지에 재투영하여 평균 거리를 계산하고,
+    // 임계값(max_reproj_error_) 초과 시 비정상 프레임으로 판단하여 이전 유효 pose를 사용
+    {
+        // 6.1 Reproject 3D points to image plane
+        std::vector<cv::Point2f> projected;
+        cv::projectPoints(pt3D, rvec, tvec, camera_matrix_, dist_coeffs_, projected);
 
-    // 7. Compute point poses and project them onto the image
+        // 6.2 Calculate mean reprojection error
+        double totalErr = 0.0;
+        for (size_t i = 0; i < pt2D.size(); ++i) {
+            double dx = projected[i].x - pt2D[i].x;
+            double dy = projected[i].y - pt2D[i].y;
+            totalErr += std::sqrt(dx * dx + dy * dy);
+        }
+        double meanReprojErr = totalErr / pt2D.size();
+
+        // 6.3 Outlier Rejection
+        if (meanReprojErr > max_reproj_error_) {
+            if (has_last_valid_pose_) {
+                rvec = last_rvec_.clone();
+                tvec = last_tvec_.clone();
+            } else {
+                return false;
+            }
+        } else {
+            last_rvec_           = rvec.clone();
+            last_tvec_           = tvec.clone();
+            has_last_valid_pose_ = true;
+        }
+    }
+
+    // 7. Convert to 4x4 transformation matrix & SLERP 필터 적용
+    Eigen::Matrix4f T_cam_2_marker          = rvecTvecToMatrix(rvec, tvec);
+    Eigen::Matrix4f T_cam_2_marker_filtered = pose_filter_.filter(T_cam_2_marker);
+
+    // 7.1 Update rvec/tvec to filtered values
+    {
+        cv::Mat R_f(3, 3, CV_64F);
+        for (int r = 0; r < 3; r++)
+            for (int c = 0; c < 3; c++)
+                R_f.at<double>(r, c) = static_cast<double>(T_cam_2_marker_filtered(r, c));
+        cv::Rodrigues(R_f, rvec);
+        tvec.at<double>(0) = T_cam_2_marker_filtered(0, 3);
+        tvec.at<double>(1) = T_cam_2_marker_filtered(1, 3);
+        tvec.at<double>(2) = T_cam_2_marker_filtered(2, 3);
+    }
+
+    // 8. Compute target point poses from filtered base marker transform
     target_point_transforms.clear();
-    target_point_transforms.reserve(target_points_.size());  // Pre-allocate memory
+    target_point_transforms.reserve(target_points_.size());
 
     for (size_t i = 0; i < target_points_.size(); i++) {
-        // 7.0 Target point pose in marker frame
+        // 8.0 Target point pose in marker frame
         Eigen::Vector3f t_offset(
             target_points_[i].position(0),
             target_points_[i].position(1),
@@ -129,11 +174,17 @@ bool MultiTagPoseEstimator::estimate(
         T_marker_2_target_point.block<3, 3>(0, 0) = R_offset;
         T_marker_2_target_point.block<3, 1>(0, 3) = t_offset;
 
-        // 7.1 Target point pose in camera frame
-        Eigen::Matrix4f T_camera_2_target_point = T_cam_2_marker * T_marker_2_target_point;
-        Eigen::Vector3f pos_cam                 = T_camera_2_target_point.block<3, 1>(0, 3);
+        // 8.1 Target point pose in camera frame (filtered base marker 사용)
+        Eigen::Matrix4f T_camera_2_target_point = T_cam_2_marker_filtered * T_marker_2_target_point;
 
-        // 7.2 Image projection
+        // 8.2 Store the transformation matrix for this point
+        target_point_transforms.push_back(T_camera_2_target_point);
+    }
+
+    // 9. Visualize filtered target points on image (필터 적용 후 위치로 시각화)
+    for (size_t i = 0; i < target_point_transforms.size(); i++) {
+        Eigen::Vector3f pos_cam = target_point_transforms[i].block<3, 1>(0, 3);
+
         Eigen::Vector3f img_point_eigen;
         img_point_eigen(0) = camera_matrix_.at<double>(0, 0) * pos_cam(0) +
                              camera_matrix_.at<double>(0, 2) * pos_cam(2);
@@ -144,19 +195,16 @@ bool MultiTagPoseEstimator::estimate(
         if (img_point_eigen(2) > 0) {
             img_point_eigen /= img_point_eigen(2);
 
-            // 7.3 Draw white circle with black border
+            // 9.1 Draw white circle with black border
             cv::Point img_point(
                 static_cast<int>(img_point_eigen(0)),
                 static_cast<int>(img_point_eigen(1)));
             cv::circle(img, img_point, 5, cv::Scalar(255, 255, 255), -1);  // Fill white
             cv::circle(img, img_point, 5, cv::Scalar(0, 0, 0), 2);         // Black border
         }
-
-        // 7.4 Store the transformation matrix for this point
-        target_point_transforms.push_back(T_camera_2_target_point);
     }
 
-    // 8. Visualize the base marker pose using axes
+    // 10. Visualize the base marker pose using axes
     cv::drawFrameAxes(img, camera_matrix_, dist_coeffs_, rvec, tvec, tag_size_);
 
     return true;

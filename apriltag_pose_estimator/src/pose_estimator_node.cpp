@@ -153,6 +153,11 @@ void PoseEstimatorNode::cameraInfoCallback(const sensor_msgs::msg::CameraInfo::S
         marker_ids_int.push_back(static_cast<int>(id));
     }
 
+    // RealSense D415 is using INVERSE_BROWN_CONRADY model,
+    // which is not compatible with OpenCV's forward Brown-Conrady model
+    // So, we use zeros for the distortion coefficients
+    cv::Mat zeros_dist = cv::Mat::zeros(5, 1, CV_64F);
+
     // Create estimator now that we have camera info
     estimator_ = std::make_unique<MultiTagPoseEstimator>(
         marker_ids_int,
@@ -160,7 +165,8 @@ void PoseEstimatorNode::cameraInfoCallback(const sensor_msgs::msg::CameraInfo::S
         target_points_,
         tag_size_,
         camera_matrix_,
-        dist_coeffs_,
+        // dist_coeffs_,
+        zeros_dist,
         static_cast<int>(base_marker_id_));
 
     camera_info_received_ = true;

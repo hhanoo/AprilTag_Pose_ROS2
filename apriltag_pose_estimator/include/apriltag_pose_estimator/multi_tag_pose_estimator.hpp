@@ -5,6 +5,7 @@
 #include <opencv2/opencv.hpp>
 #include <vector>
 
+#include "apriltag_pose_estimator/slerp_pose_filter.hpp"
 #include "apriltag_pose_estimator/tag_config.hpp"
 
 namespace apriltag_pose_estimator {
@@ -56,6 +57,15 @@ class MultiTagPoseEstimator {
     cv::Mat                  camera_matrix_;       // Camera intrinsic matrix (3x3)
     cv::Mat                  dist_coeffs_;         // Distortion coefficients (5x1)
     int                      base_marker_id_;      // Base marker ID (default: first marker ID)
+
+    // Reprojection Error-based Outlier Rejection
+    bool    has_last_valid_pose_ = false;  // Whether the previous valid pose exists
+    cv::Mat last_rvec_;                    // Last valid rotation vector
+    cv::Mat last_tvec_;                    // Last valid translation vector
+    double  max_reproj_error_ = 15.0;      // Maximum reprojection error threshold (pixel units)
+
+    // Quaternion SLERP EMA filter
+    PoseFilter pose_filter_;
 };
 
 }  // namespace apriltag_pose_estimator

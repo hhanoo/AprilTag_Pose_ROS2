@@ -46,6 +46,7 @@ include_directories(
 add_library(${PROJECT_NAME}_lib
     src/april_tag_detector.cpp
     src/multi_tag_pose_estimator.cpp
+    src/slerp_pose_filter.cpp
 )
 target_link_libraries(${PROJECT_NAME}_lib
     ${OpenCV_LIBS}
