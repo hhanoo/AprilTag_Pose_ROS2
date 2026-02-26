@@ -33,7 +33,7 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                    Apriltag Pose ROS2 System                          │
+│                    Apriltag Pose ROS2 System                     │
 └──────────────────────────────────────────────────────────────────┘
 
     Intel RealSense D435/D455
@@ -384,6 +384,9 @@ ros2 launch apriltag_pose_estimator apriltag_estimator.launch.py \
 source ~/vision_ws/install/setup.bash
 ros2 run apriltag_pose_visualizer pose_visualizer_node
 ```
+
+- Launch system ROS2 Graph
+  ![Launch_ROS_Graph](docs/launch_ros_graph.png)
 
 ### Launch with Custom Configuration
 

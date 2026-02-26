@@ -151,10 +151,14 @@ class PoseVisualizerNode(Node):
             )
             txt_y += 30
 
-        for label in ["roll", "pitch", "yaw"]:
+        for label, value in [
+            ("roll", roll_deg),
+            ("pitch", pitch_deg),
+            ("yaw", yaw_deg),
+        ]:
             cv2.putText(
                 img,
-                f"{label}: {eval(label + '_deg'):.4f} deg",
+                f"{label}: {value:.4f} deg",
                 (20, txt_y),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.7,
