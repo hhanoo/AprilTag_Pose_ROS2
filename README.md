@@ -1,4 +1,4 @@
-# Vision Stack ROS2
+# Apriltag Pose ROS2
 
 **AprilTag 기반 실시간 6-DOF 포즈 추정 시스템**
 
@@ -33,7 +33,7 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                    Vision Stack ROS2 System                       │
+│                    Apriltag Pose ROS2 System                          │
 └──────────────────────────────────────────────────────────────────┘
 
     Intel RealSense D435/D455
@@ -69,7 +69,7 @@
 ### 프로젝트 구조
 
 ```
-Vision_Stack_ROS2/
+Apriltag_Pose_ROS2/
 ├── realsense-ros/                 # RealSense ROS2 driver (realsense2_camera)
 │   └── realsense2_camera/
 │       └── launch/
@@ -107,7 +107,7 @@ Vision_Stack_ROS2/
 
 ### 이게 뭔가요?
 
-Vision Stack ROS2는 Intel RealSense 카메라와 AprilTag를 활용한 실시간 6자유도(6-DOF) 포즈 추정 시스템입니다. 다중 마커 융합 알고리즘을 통해 단일 마커 대비 2-3배 향상된 정확도로 타겟 객체의 위치와 자세를 추정합니다.
+Apriltag Pose ROS2는 Intel RealSense 카메라와 AprilTag를 활용한 실시간 6자유도(6-DOF) 포즈 추정 시스템입니다. 다중 마커 융합 알고리즘을 통해 단일 마커 대비 2-3배 향상된 정확도로 타겟 객체의 위치와 자세를 추정합니다.
 
 ### 주요 구성요소
 
@@ -145,8 +145,8 @@ Vision Stack ROS2는 Intel RealSense 카메라와 AprilTag를 활용한 실시�
 
 ```bash
 # 1. 저장소 클론
-git clone <repository-url> ~/Vision_Stack_ROS2
-cd ~/Vision_Stack_ROS2
+git clone <repository-url> ~/Apriltag_Pose_ROS2
+cd ~/Apriltag_Pose_ROS2
 
 # 2. Docker 이미지 빌드
 cd docker
@@ -171,7 +171,7 @@ ros2 launch apriltag_pose_estimator apriltag_estimator.launch.py
 
 ```bash
 # 1. 저장소 클론 및 의존성 설치
-git clone <repository-url> ~/vision_ws/src/Vision_Stack_ROS2
+git clone <repository-url> ~/vision_ws/src/Apriltag_Pose_ROS2
 cd ~/vision_ws
 rosdep install --from-paths src --ignore-src -r -y
 
@@ -228,7 +228,7 @@ ros2 launch apriltag_pose_estimator apriltag_estimator.launch.py
 Docker를 사용하면 모든 의존성이 자동으로 설치됩니다:
 
 ```bash
-cd ~/Vision_Stack_ROS2/docker
+cd ~/Apriltag_Pose_ROS2/docker
 ./build.sh
 ```
 
@@ -288,7 +288,7 @@ mkdir -p ~/vision_ws/src
 cd ~/vision_ws/src
 
 # 저장소 클론
-git clone <repository-url> Vision_Stack_ROS2
+git clone <repository-url> Apriltag_Pose_ROS2
 ```
 
 #### 5. ROS 의존성 설치
@@ -406,7 +406,7 @@ ros2 launch apriltag_pose_estimator apriltag_estimator.launch.py \
 
 ```bash
 # Docker 컨테이너 실행
-cd ~/Vision_Stack_ROS2/docker
+cd ~/Apriltag_Pose_ROS2/docker
 ./run.sh
 
 # 컨테이너 내부에서

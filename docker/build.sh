@@ -4,7 +4,7 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Set image name
-IMAGE_NAME="vision-stack-humble:latest"
+IMAGE_NAME="aprilpose-ros2-humble:latest"
 
 # Build the Docker image
 echo "Building Docker image: $IMAGE_NAME..."

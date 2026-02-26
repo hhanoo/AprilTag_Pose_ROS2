@@ -5,10 +5,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROS2_WS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Set image name
-IMAGE_NAME="vision-stack-humble:latest"
+IMAGE_NAME="aprilpose-ros2-humble:latest"
 
 # Set container name
-CONTAINER_NAME="vision-stack-humble"
+CONTAINER_NAME="aprilpose-ros2-humble"
 
 # Check if the image exists
 if ! docker image inspect $IMAGE_NAME > /dev/null 2>&1; then
