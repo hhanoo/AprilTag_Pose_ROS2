@@ -105,7 +105,7 @@ Apriltag_Pose_ROS2/
 
 ## 개요
 
-### 이게 뭔가요?
+### 프로젝트 목적
 
 Apriltag Pose ROS2는 Intel RealSense 카메라와 AprilTag를 활용한 실시간 6자유도(6-DOF) 포즈 추정 시스템입니다. 다중 마커 융합 알고리즘을 통해 단일 마커 대비 2-3배 향상된 정확도로 타겟 객체의 위치와 자세를 추정합니다.
 
@@ -116,7 +116,7 @@ Apriltag Pose ROS2는 Intel RealSense 카메라와 AprilTag를 활용한 실시�
 - **apriltag_pose_visualizer** (Python): 실시간 검출 결과 시각화 및 Roll/Pitch/Yaw 계산
 - **apriltag_pose_estimator_msgs**: ROS2 커스텀 메시지 및 서비스 인터페이스
 
-### 사용 사례
+### 적용 가능 영역
 
 - 로봇 비전 시스템의 객체 위치 추적
 - 자율 네비게이션을 위한 공간 인식
