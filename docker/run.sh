@@ -4,11 +4,11 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROS2_WS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# Set image name
-IMAGE_NAME="aprilpose-ros2-humble:latest"
-
-# Set container name
-CONTAINER_NAME="aprilpose-ros2-humble"
+# Load common variables (auto-copy from example if not exists)
+if [ ! -f "$SCRIPT_DIR/config.sh" ]; then
+    cp "$SCRIPT_DIR/config.sh.example" "$SCRIPT_DIR/config.sh"
+fi
+source "$SCRIPT_DIR/config.sh"
 
 # Check if the image exists
 if ! docker image inspect $IMAGE_NAME > /dev/null 2>&1; then

@@ -23,6 +23,7 @@ venv/
 .env
 *.env
 config.ini
+docker/config.sh
 
 # Log
 logs/
