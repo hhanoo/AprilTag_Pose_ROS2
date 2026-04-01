@@ -4,7 +4,7 @@ pose_estimator_node:
     # AprilTag Configuration
     # =========================================================
     marker_ids: [0, 1, 2]               # IDs of markers to use
-    base_marker_id: 1                  # Base marker ID (-1: use first marker_id)
+    base_marker_id: 1                   # Base marker ID (-1: use first marker_id)
     tag_size: 0.02778                   # Tag size in meters (27.78mm)
     tag_family: 'tagStandard41h12'      # AprilTag family
     marker_offsets: [0.065, 0.0]        # [X, Y] offset between markers (m)
@@ -39,4 +39,8 @@ pose_estimator_node:
     publish_visualization: true      # Publish RViz2 markers
     publish_detection_image: true    # Publish detection image
 
+    # =========================================================
+    # Service Options
+    # =========================================================
+    show_service_result_window: false # Show OpenCV window on service call (set false in Docker/headless)
 

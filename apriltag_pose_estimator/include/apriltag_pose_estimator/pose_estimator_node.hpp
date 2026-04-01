@@ -87,13 +87,14 @@ class PoseEstimatorNode : public rclcpp::Node {
     // ========================================================================
     // Parameters
     // ========================================================================
-    std::vector<int64_t>     marker_ids_;          // Marker IDs to use
-    int64_t                  base_marker_id_;      // Base marker ID
-    double                   tag_size_;            // Tag size in meters
-    std::string              tag_family_;          // AprilTag family
-    std::vector<double>      marker_offsets_;      // [X, Y] offset between markers
-    std::vector<double>      target_points_flat_;  // Target points (Nx6 flat list)
-    std::vector<TargetPoint> target_points_;       // Target points
+    std::vector<int64_t>     marker_ids_;                  // Marker IDs to use
+    int64_t                  base_marker_id_;              // Base marker ID
+    double                   tag_size_;                    // Tag size in meters
+    std::string              tag_family_;                  // AprilTag family
+    std::vector<double>      marker_offsets_;              // [X, Y] offset between markers
+    std::vector<double>      target_points_flat_;          // Target points (Nx6 flat list)
+    std::vector<TargetPoint> target_points_;               // Target points
+    bool                     show_service_result_window_;  // Show result window on service call
 
     // ========================================================================
     // Topic Names
@@ -118,6 +119,7 @@ class PoseEstimatorNode : public rclcpp::Node {
     bool                         latest_tag_detected_;  // Latest tag detected flag
     cv::Mat                      latest_rvec_;          // Latest rotation vector
     cv::Mat                      latest_tvec_;          // Latest translation vector
+    cv::Mat                      latest_vis_image_;     // Latest visualization image
     std::vector<Eigen::Matrix4f> latest_transforms_;    // Latest target point transforms
     rclcpp::Time                 latest_timestamp_;     // Latest detection timestamp
 };

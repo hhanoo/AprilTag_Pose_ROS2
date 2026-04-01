@@ -21,7 +21,7 @@ def launch_setup(context):
     # =========================================================
     # Launch Configuration Arguments
     config_file = LaunchConfiguration("config_file")
-    show_detection = LaunchConfiguration("show_detection")
+    show_service_result_window = LaunchConfiguration("show_service_result_window")
     camera_topic = LaunchConfiguration("camera_topic")
     camera_info_topic = LaunchConfiguration("camera_info_topic")
     tag_family = LaunchConfiguration("tag_family")
@@ -55,6 +55,12 @@ def launch_setup(context):
         parameters.append(
             {
                 "tag_size": tag_size,
+            }
+        )
+    if show_service_result_window.perform(context) != "":
+        parameters.append(
+            {
+                "show_service_result_window": show_service_result_window,
             }
         )
 
@@ -105,9 +111,9 @@ def generate_launch_description():
 
     declared_arguments.append(
         DeclareLaunchArgument(
-            "show_detection",
-            default_value="true",
-            description="Show detection image in RQt Image View",
+            "show_service_result_window",
+            default_value="",
+            description="Show OpenCV result window on service call (disable in Docker/headless)",
         )
     )
 

@@ -1,6 +1,9 @@
 #include "apriltag_pose_estimator/pose_estimator_node.hpp"
 
 #include <Eigen/Geometry>
+#include <cstdlib>
+#include <opencv2/highgui.hpp>
+#include <opencv2/imgproc.hpp>
 
 namespace apriltag_pose_estimator {
 
@@ -22,6 +25,7 @@ PoseEstimatorNode::PoseEstimatorNode()
                                                  0.000, 0.000, 0.000, 0.000, 0.000, 0.000,  // Point 1 (x y z r p y)
                                                  0.000, 0.000, 0.000, 0.000, 0.000, 0.000   // Point 2 (x y z r p y)
                                              });
+    this->declare_parameter("show_service_result_window", false);
     // * Input topics
     this->declare_parameter("camera_topic", "realsense_node/color/image_raw");
     this->declare_parameter("camera_info_topic", "realsense_node/color/camera_info");
@@ -33,12 +37,13 @@ PoseEstimatorNode::PoseEstimatorNode()
 
     // ---------- Get Parameters ----------
     // * AprilTag configuration
-    marker_ids_         = this->get_parameter("marker_ids").as_integer_array();
-    base_marker_id_     = this->get_parameter("base_marker_id").as_int();
-    tag_size_           = this->get_parameter("tag_size").as_double();
-    tag_family_         = this->get_parameter("tag_family").as_string();
-    marker_offsets_     = this->get_parameter("marker_offsets").as_double_array();
-    target_points_flat_ = this->get_parameter("target_points").as_double_array();
+    marker_ids_                 = this->get_parameter("marker_ids").as_integer_array();
+    base_marker_id_             = this->get_parameter("base_marker_id").as_int();
+    tag_size_                   = this->get_parameter("tag_size").as_double();
+    tag_family_                 = this->get_parameter("tag_family").as_string();
+    marker_offsets_             = this->get_parameter("marker_offsets").as_double_array();
+    target_points_flat_         = this->get_parameter("target_points").as_double_array();
+    show_service_result_window_ = this->get_parameter("show_service_result_window").as_bool();
 
     // * Input topics
     camera_topic_      = this->get_parameter("camera_topic").as_string();
@@ -50,6 +55,9 @@ PoseEstimatorNode::PoseEstimatorNode()
 
     // * Service server
     target_point_pose_service_ = this->get_parameter("target_point_pose_service").as_string();
+
+    // ---------- OpenCV GUI Thread ----------
+    cv::startWindowThread();
 
     // ---------- Data Conversion ----------
     // * Convert marker_ids to int vector
@@ -116,6 +124,8 @@ PoseEstimatorNode::PoseEstimatorNode()
     RCLCPP_INFO(this->get_logger(), "  Tag size: %.5f m", tag_size_);
     RCLCPP_INFO(this->get_logger(), "  Target points: %zu", target_points_.size());
     RCLCPP_INFO(this->get_logger(), "  Target point pose service: %s", target_point_pose_service_.c_str());
+    RCLCPP_INFO(this->get_logger(), "  Show service result window: %s",
+                show_service_result_window_ ? "true" : "false");
 }
 
 // ========================================================================
@@ -209,6 +219,7 @@ void PoseEstimatorNode::imageCallback(const sensor_msgs::msg::Image::SharedPtr m
                 latest_tag_detected_ = false;
                 latest_rvec_         = cv::Mat::zeros(3, 1, CV_64F);
                 latest_tvec_         = cv::Mat::zeros(3, 1, CV_64F);
+                latest_vis_image_    = cv::Mat();
                 latest_transforms_.clear();
             }
             publishTagDetection();
@@ -251,6 +262,7 @@ void PoseEstimatorNode::imageCallback(const sensor_msgs::msg::Image::SharedPtr m
                 latest_tag_detected_ = false;
                 latest_rvec_         = cv::Mat::zeros(3, 1, CV_64F);
                 latest_tvec_         = cv::Mat::zeros(3, 1, CV_64F);
+                latest_vis_image_    = cv::Mat();
                 latest_transforms_.clear();
             }
             publishTagDetection();
@@ -266,6 +278,7 @@ void PoseEstimatorNode::imageCallback(const sensor_msgs::msg::Image::SharedPtr m
         latest_tag_detected_ = true;
         latest_rvec_         = rvec;
         latest_tvec_         = tvec;
+        latest_vis_image_    = vis_image.clone();
         latest_transforms_   = target_point_transforms;
         latest_timestamp_    = msg->header.stamp;
     }
@@ -278,14 +291,79 @@ void PoseEstimatorNode::imageCallback(const sensor_msgs::msg::Image::SharedPtr m
 void PoseEstimatorNode::targetPointPoseServiceCallback(
     std::shared_ptr<apriltag_pose_estimator_msgs::srv::TargetPointPose::Request>  request,
     std::shared_ptr<apriltag_pose_estimator_msgs::srv::TargetPointPose::Response> response) {
-    //
     std::lock_guard<std::mutex> lock(detection_mutex_);
+
+    if (show_service_result_window_ && !latest_vis_image_.empty()) {
+        const char* display_env         = std::getenv("DISPLAY");
+        const char* wayland_display_env = std::getenv("WAYLAND_DISPLAY");
+        const bool  has_gui_session =
+            (display_env != nullptr && display_env[0] != '\0') ||
+            (wayland_display_env != nullptr && wayland_display_env[0] != '\0');
+
+        if (!has_gui_session) {
+            RCLCPP_WARN_THROTTLE(
+                this->get_logger(),
+                *this->get_clock(),
+                5000,
+                "show_service_result_window=true but no GUI session found (DISPLAY/WAYLAND_DISPLAY). "
+                "Skipping result window.");
+        } else {
+            try {
+                cv::Mat display_image = latest_vis_image_.clone();
+
+                // Draw tvec (tx, ty, tz)
+                int                        txt_y    = 40;
+                std::array<std::string, 3> t_labels = {"tx", "ty", "tz"};
+                for (int i = 0; i < 3; i++) {
+                    char buf[64];
+                    std::snprintf(buf, sizeof(buf), "%s: %.4f m", t_labels[i].c_str(),
+                                  latest_tvec_.at<double>(i));
+                    cv::putText(display_image, buf, cv::Point(20, txt_y),
+                                cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255, 255, 255), 2,
+                                cv::LINE_AA);
+                    txt_y += 30;
+                }
+
+                // Convert rvec to roll, pitch, yaw (degrees)
+                cv::Mat rot_mat;
+                cv::Rodrigues(latest_rvec_, rot_mat);
+                double sy    = std::sqrt(rot_mat.at<double>(0, 0) * rot_mat.at<double>(0, 0) +
+                                         rot_mat.at<double>(1, 0) * rot_mat.at<double>(1, 0));
+                double roll  = std::atan2(rot_mat.at<double>(2, 1), rot_mat.at<double>(2, 2));
+                double pitch = std::atan2(-rot_mat.at<double>(2, 0), sy);
+                double yaw   = std::atan2(rot_mat.at<double>(1, 0), rot_mat.at<double>(0, 0));
+
+                std::array<std::pair<std::string, double>, 3> r_labels = {
+                    {{"roll", roll * 180.0 / CV_PI},
+                     {"pitch", pitch * 180.0 / CV_PI},
+                     {"yaw", yaw * 180.0 / CV_PI}}};
+                for (const auto& [label, value] : r_labels) {
+                    char buf[64];
+                    std::snprintf(buf, sizeof(buf), "%s: %.4f deg", label.c_str(), value);
+                    cv::putText(display_image, buf, cv::Point(20, txt_y),
+                                cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255, 255, 255), 2,
+                                cv::LINE_AA);
+                    txt_y += 30;
+                }
+
+                cv::imshow("AprilTag Pose Estimator Result", display_image);
+                cv::waitKey(1);
+            } catch (const cv::Exception& e) {
+                RCLCPP_WARN_THROTTLE(
+                    this->get_logger(),
+                    *this->get_clock(),
+                    5000,
+                    "Failed to show service result window: %s",
+                    e.what());
+            }
+        }
+    }
 
     // No poses available
     if (latest_transforms_.empty()) {
         response->success = false;
-        response->message = "No valid target point poses available";
-        RCLCPP_WARN(this->get_logger(), "Service called but no poses available");
+        response->message = "No recent valid target point poses available";
+        RCLCPP_WARN(this->get_logger(), "Service called but no recent valid target poses are available");
         return;
     }
 
