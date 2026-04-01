@@ -1,18 +1,23 @@
-# Apriltag Pose ROS2
+# AprilTag Pose ROS2
 
 **AprilTag 기반 실시간 6-DOF 포즈 추정 시스템**
 
-[![ROS2](https://img.shields.io/badge/ROS2-Humble-blue)](https://docs.ros.org/en/humble/)
-[![Python](https://img.shields.io/badge/Python-3.10+-blue)](https://www.python.org/)
-[![C++](https://img.shields.io/badge/C++-17-blue)](https://isocpp.org/)
-[![License](https://img.shields.io/badge/License-MIT-orange)](LICENSE)
-[![Docker](https://img.shields.io/badge/Docker-Supported-brightgreen)](docker/)
+[![ROS2](https://img.shields.io/badge/ROS2-Humble-22314E?logo=ros&logoColor=white)](https://docs.ros.org/en/humble/)
+[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![C++](https://img.shields.io/badge/C++-17-00599C?logo=cplusplus&logoColor=white)](https://isocpp.org/)
+[![OpenCV](https://img.shields.io/badge/OpenCV-4.x-5C3EE8?logo=opencv&logoColor=white)](https://opencv.org/)
+[![License](https://img.shields.io/badge/License-MIT-F99304?logo=opensourceinitiative&logoColor=white)](LICENSE)
+[![Docker](https://img.shields.io/badge/Docker-Supported-2496ED?logo=docker&logoColor=white)](docker/)
 
-## 📋 목차
+---
+
+## 목차
 
 - [데모](#데모)
 - [개요](#개요)
 - [주요 기능](#주요-기능)
+- [시스템 구조](#시스템-구조)
+- [프로젝트 구조](#프로젝트-구조)
 - [빠른 시작](#빠른-시작)
 - [시스템 요구사항](#시스템-요구사항)
 - [설치](#설치)
@@ -20,86 +25,21 @@
 - [실행](#실행)
 - [사용법](#사용법)
 - [설정](#설정)
-- [ROS2 인터페이스](#ros2-인터페이스)
+- [API / 인터페이스](#api--인터페이스)
 - [문제 해결](#문제-해결)
-- [자주 묻는 질문](#자주-묻는-질문)
 - [라이선스](#라이선스)
+- [Maintainer](#maintainer)
 
 ---
 
 ## 데모
 
-### 시스템 구조
+<details>
+<summary>ROS2 Graph</summary>
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                    Apriltag Pose ROS2 System                     │
-└──────────────────────────────────────────────────────────────────┘
+![Launch_ROS_Graph](docs/launch_ros_graph.png)
 
-    Intel RealSense D435/D455
-              │
-              │ USB 3.0
-              ▼
-    ┌──────────────────────┐
-    │ realsense2_camera    │ (C++)
-    │ - Camera streaming   │
-    │ - Intrinsics pub     │
-    └──────────┬───────────┘
-               │ /color/image_raw
-               │ /color/camera_info
-               ▼
-    ┌──────────────────────┐
-    │apriltag_pose_        │ (C++)
-    │estimator             │
-    │ - Tag detection      │
-    │ - Multi-tag fusion   │
-    │ - 6-DOF pose calc    │
-    └──────────┬───────────┘
-               │ /tag_detections
-               │ /target_poses
-               ▼
-    ┌──────────────────────┐
-    │apriltag_pose_        │ (Python)
-    │visualizer            │
-    │ - Overlay drawing    │
-    │ - Roll/Pitch/Yaw     │
-    └──────────────────────┘
-```
-
-### 프로젝트 구조
-
-```
-Apriltag_Pose_ROS2/
-├── realsense-ros/                 # RealSense ROS2 driver (realsense2_camera)
-│   └── realsense2_camera/
-│       └── launch/
-│           └── rs_launch.py       # Camera launch file
-│
-├── apriltag_pose_estimator/       # Pose estimator (C++)
-│   ├── src/
-│   │   ├── pose_estimator_node.cpp
-│   │   ├── april_tag_detector.cpp
-│   │   └── multi_tag_pose_estimator.cpp
-│   ├── launch/
-│   │   └── apriltag_estimator.launch.py
-│   └── config/
-│       └── pose_estimator.yaml
-│
-├── apriltag_pose_estimator_msgs/  # Custom interfaces
-│   ├── msg/
-│   │   └── TagDetection.msg       # AprilTag pose data
-│   └── srv/
-│       └── TargetPointPose.srv    # Pose query service
-│
-├── apriltag_pose_visualizer/      # Visualization (Python)
-│   └── apriltag_pose_visualizer/
-│       └── pose_visualizer_node.py
-│
-└── docker/                        # Docker support
-    ├── Dockerfile
-    ├── build.sh
-    └── run.sh
-```
+</details>
 
 ---
 
@@ -107,35 +47,117 @@ Apriltag_Pose_ROS2/
 
 ### 프로젝트 목적
 
-Apriltag Pose ROS2는 Intel RealSense 카메라와 AprilTag를 활용한 실시간 6자유도(6-DOF) 포즈 추정 시스템입니다. 다중 마커 융합 알고리즘을 통해 단일 마커 대비 2-3배 향상된 정확도로 타겟 객체의 위치와 자세를 추정합니다.
+AprilTag Pose ROS2는 Intel RealSense 카메라와 AprilTag 마커를 활용하여 타겟 객체의 6자유도(6-DOF) 위치와 자세를 실시간으로 추정하는 시스템입니다. 다중 마커 융합 알고리즘(Multi-tag PnP)을 적용하여 단일 마커 대비 높은 정확도를 달성하며, SLERP 기반 쿼터니언 필터로 안정적인 포즈 출력을 제공합니다.
 
 ### 주요 구성요소
 
-- **realsense2_camera** (C++): Intel RealSense D435/D455 공식 ROS2 드라이버 (`realsense-ros`)
-- **apriltag_pose_estimator** (C++): 고성능 AprilTag 검출 및 다중 마커 포즈 융합
-- **apriltag_pose_visualizer** (Python): 실시간 검출 결과 시각화 및 Roll/Pitch/Yaw 계산
+- **realsense2_camera** (C++): Intel RealSense D435/D455 공식 ROS2 드라이버
+- **apriltag_pose_estimator** (C++): AprilTag 검출, 다중 마커 포즈 융합, SLERP 필터링
+- **apriltag_pose_visualizer** (Python): 실시간 검출 결과 시각화, Roll/Pitch/Yaw 계산, 3D 산점도
 - **apriltag_pose_estimator_msgs**: ROS2 커스텀 메시지 및 서비스 인터페이스
 
 ### 적용 가능 영역
 
 - 로봇 비전 시스템의 객체 위치 추적
 - 자율 네비게이션을 위한 공간 인식
-- AR/VR 마커 기반 위치 추정
 - 산업 자동화 시스템의 정밀 포지셔닝
+- AR/VR 마커 기반 위치 추정
 - 연구 개발 및 교육
 
 ---
 
 ## 주요 기능
 
-- 🎯 **다중 마커 융합** - PnP 기반 multi-tag 포즈 추정으로 단일 마커 대비 2-3배 정확도 향상
-- ⚡ **고성능 C++ 구현** - Python 대비 3-5배 빠른 처리 속도 (5-8ms/frame @ 1280x720)
-- 📷 **Intel RealSense 통합** - D435/D455 카메라 네이티브 지원 및 자동 intrinsic 캘리브레이션
-- 🔧 **YAML 기반 설정** - 마커 ID, 크기, 오프셋을 YAML로 유연하게 구성
-- 📊 **실시간 시각화** - RViz 마커 및 OpenCV 기반 detection image 오버레이
-- 🐳 **Docker 지원** - 빌드 및 실행 스크립트 포함, 원클릭 컨테이너 환경
-- 🔌 **서비스 인터페이스** - 온디맨드 포즈 쿼리를 위한 ROS2 서비스 제공
-- 🎨 **혼합 언어 아키텍처** - Python(카메라/시각화) + C++(검출/추정)의 최적 조합
+- **다중 마커 PnP 융합**: 복수의 AprilTag 코너를 동시에 활용하여 단일 마커 대비 향상된 6-DOF 포즈 추정
+- **SLERP 쿼터니언 필터**: Gimbal lock 없는 회전 보간과 적응형 EMA로 프레임 간 지터 억제
+- **Reprojection Error 기반 이상치 제거**: 15픽셀 임계값으로 불량 검출 자동 필터링
+- **고성능 C++ 파이프라인**: 실시간 처리에 적합한 네이티브 구현 (5-8ms/frame @ 1280x720)
+- **YAML 기반 유연한 설정**: 마커 ID, 크기, 오프셋, 타겟 포인트를 설정 파일로 관리
+- **실시간 3D 시각화**: 위치(tvec) 및 회전(RPY) 히스토리의 3D 산점도와 통계 오버레이
+- **서비스 인터페이스**: 온디맨드 포즈 쿼리를 위한 ROS2 서비스 제공
+- **Docker 지원**: 빌드 및 실행 스크립트 포함, 원클릭 컨테이너 환경
+
+---
+
+## 시스템 구조
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│                      AprilTag Pose ROS2 System                       │
+└──────────────────────────────────────────────────────────────────────┘
+
+    Intel RealSense D435/D455
+              │
+              │ USB 3.0
+              ▼
+    ┌───────────────────────┐
+    │  realsense2_camera    │  (C++)
+    │  - Camera streaming   │
+    │  - Intrinsics publish │
+    └───────────┬───────────┘
+                │  /color/image_raw
+                │  /color/camera_info
+                ▼
+    ┌───────────────────────┐     ┌───────────────────────┐
+    │ apriltag_pose_        │     │ apriltag_pose_        │
+    │ estimator             │────▶│ visualizer            │  (Python)
+    │  - Tag detection      │     │  - Overlay drawing    │
+    │  - Multi-tag PnP      │     │  - RPY calculation    │
+    │  - SLERP filtering    │     │  - 3D scatter plots   │
+    │  - Outlier rejection  │     └───────────────────────┘
+    └───────────┬───────────┘
+                │  /target_poses
+                │  /tag_detections
+                ▼
+         Service Client
+    (target_point_pose query)
+```
+
+---
+
+## 프로젝트 구조
+
+```
+AprilTag_Pose_ROS2/
+├── apriltag_pose_estimator/                # 포즈 추정 패키지 (C++)
+│   ├── src/
+│   │   ├── pose_estimator_node.cpp         # ROS2 노드 구현
+│   │   ├── april_tag_detector.cpp          # AprilTag 검출 래퍼
+│   │   ├── multi_tag_pose_estimator.cpp    # 다중 마커 PnP 융합
+│   │   ├── slerp_pose_filter.cpp           # 쿼터니언 SLERP 필터
+│   │   └── main.cpp                        # 엔트리 포인트
+│   ├── include/apriltag_pose_estimator/
+│   │   ├── pose_estimator_node.hpp
+│   │   ├── april_tag_detector.hpp
+│   │   ├── multi_tag_pose_estimator.hpp
+│   │   ├── slerp_pose_filter.hpp
+│   │   └── tag_config.hpp                  # 데이터 구조 정의
+│   ├── config/
+│   │   └── pose_estimator.yaml             # 설정 파일
+│   ├── launch/
+│   │   └── apriltag_estimator.launch.py    # 런치 파일
+│   ├── CMakeLists.txt
+│   └── package.xml
+├── apriltag_pose_estimator_msgs/           # 커스텀 인터페이스
+│   ├── msg/
+│   │   └── TagDetection.msg
+│   ├── srv/
+│   │   └── TargetPointPose.srv
+│   └── CMakeLists.txt
+├── apriltag_pose_visualizer/               # 시각화 패키지 (Python)
+│   ├── apriltag_pose_visualizer/
+│   │   └── pose_visualizer_node.py
+│   ├── setup.py
+│   └── package.xml
+├── docker/                                 # Docker 지원
+│   ├── Dockerfile
+│   ├── build.sh
+│   ├── run.sh
+│   └── config.sh.example
+├── docs/
+│   └── launch_ros_graph.png
+└── realsense-ros.repos                     # RealSense ROS2 드라이버 VCS 파일
+```
 
 ---
 
@@ -144,35 +166,38 @@ Apriltag Pose ROS2는 Intel RealSense 카메라와 AprilTag를 활용한 실시�
 ### Option 1: Docker (권장)
 
 ```bash
-# 1. 저장소 클론
-git clone <repository-url> ~/Apriltag_Pose_ROS2
-cd ~/Apriltag_Pose_ROS2
+# 0. 프로젝트 루트로 이동
+cd ~/AprilTag_Pose_ROS2
 
-# 2. Docker 이미지 빌드
+# 1. Docker 이미지 빌드
 cd docker
+cp config.sh.example config.sh
 ./build.sh
 
-# 3. Docker 컨테이너 실행
+# 2. 컨테이너 실행
 ./run.sh
 
-# 4. 컨테이너 내에서 빌드 및 실행
+# 3. 컨테이너 내부에서 의존성 가져오기 및 빌드
 cd /ros2_ws
+vcs import src < src/AprilTag_Pose_ROS2/realsense-ros.repos
 colcon build
 source install/setup.bash
 
-# 터미널 1: RealSense 카메라 실행
+# 4. 실행 (터미널 2개)
 ros2 launch realsense2_camera rs_launch.py
-
-# 터미널 2 (새 터미널): 포즈 추정기 실행
 ros2 launch apriltag_pose_estimator apriltag_estimator.launch.py
 ```
 
-### Option 2: Native Installation
+### Option 2: Native
 
 ```bash
-# 1. 저장소 클론 및 의존성 설치
-git clone <repository-url> ~/vision_ws/src/Apriltag_Pose_ROS2
-cd ~/vision_ws
+# 0. 프로젝트 루트로 이동
+mkdir -p ~/ros2_ws/src && cd ~/ros2_ws/src
+git clone <repository-url> AprilTag_Pose_ROS2
+
+# 1. 의존성 가져오기
+cd ~/ros2_ws
+vcs import src < src/AprilTag_Pose_ROS2/realsense-ros.repos
 rosdep install --from-paths src --ignore-src -r -y
 
 # 2. 빌드
@@ -190,34 +215,38 @@ ros2 launch apriltag_pose_estimator apriltag_estimator.launch.py
 
 ### 필수
 
-- **OS**: Ubuntu 22.04 LTS
-- **ROS2**: Humble Hawksbill
-- **Python**: 3.10+
-- **C++**: C++17 compiler (GCC 9+, Clang 10+)
-- **CMake**: 3.16+
+| 항목   | 요구사항                  |
+| ------ | ------------------------- |
+| OS     | Ubuntu 22.04 LTS          |
+| ROS2   | Humble                    |
+| Python | 3.10+                     |
+| C++    | C++17 (GCC 9+, Clang 10+) |
 
 ### 하드웨어
 
-- **Camera**: Intel RealSense D435 or D455 (USB 3.0 required)
-- **CPU**: Multi-core processor (Intel i5+ or equivalent recommended)
-- **RAM**: 4GB minimum, 8GB recommended
-- **USB**: USB 3.0 port for RealSense camera
+| 항목   | 사양                               |
+| ------ | ---------------------------------- |
+| Camera | Intel RealSense D415 / D435 / D455 |
+| USB    | USB 3.0 포트 (필수)                |
+| CPU    | 멀티코어 프로세서 (Intel i5+ 권장) |
+| RAM    | 4GB 이상 (8GB 권장)                |
 
 ### 소프트웨어 의존성
 
-**System Libraries:**
+**시스템 라이브러리:**
 
-- libapriltag-dev (AprilTag C library)
-- libopencv-dev (OpenCV 4.x)
-- libeigen3-dev (Eigen3)
-- ros-humble-realsense2-\* (RealSense SDK)
+- `libapriltag-dev` - AprilTag C 라이브러리
+- `libopencv-dev` - OpenCV 4.x
+- `libeigen3-dev` - Eigen3 선형대수 라이브러리
+- `ros-humble-realsense2-*` - RealSense SDK ROS2 패키지
 
-**Python Packages:**
+**Python 패키지:**
 
-- pyrealsense2==2.56.5.9235
-- dt-apriltags==3.1.7
-- opencv-python==4.10.0.84
-- numpy<2.0 (for cv_bridge compatibility)
+- `numpy` (<2.0, cv_bridge 호환)
+- `pyrealsense2` (==2.56.5.9235)
+- `dt-apriltags` (==3.1.7)
+- `opencv-python` (==4.10.0.84)
+- `matplotlib` (3D 시각화)
 
 ---
 
@@ -225,76 +254,69 @@ ros2 launch apriltag_pose_estimator apriltag_estimator.launch.py
 
 ### Method 1: Docker (권장)
 
-Docker를 사용하면 모든 의존성이 자동으로 설치됩니다:
+Docker를 사용하면 모든 의존성이 자동으로 설치됩니다.
 
 ```bash
-cd ~/Apriltag_Pose_ROS2/docker
+# 0. 프로젝트 루트로 이동
+cd ~/AprilTag_Pose_ROS2/docker
+
+# 1. 설정 파일 생성
+cp config.sh.example config.sh
+
+# 2. Docker 이미지 빌드
 ./build.sh
+
+# 3. 컨테이너 실행
+./run.sh
 ```
 
-빌드 완료 후 `./run.sh`로 컨테이너를 실행하면 모든 환경이 준비됩니다.
-
-### Method 2: Native Installation
+### Method 2: Native
 
 #### 1. ROS2 Humble 설치
 
-공식 설치 가이드를 따르세요:
+[ROS2 Humble 공식 설치 가이드](https://docs.ros.org/en/humble/Installation.html)를 참고하세요.
 
-- [ROS2 Humble (Ubuntu 22.04)](https://docs.ros.org/en/humble/Installation.html)
-
-#### 2. 시스템 의존성 설치
+#### 2. 워크스페이스 생성 및 저장소 클론
 
 ```bash
-# 기본 빌드 도구
+mkdir -p ~/ros2_ws/src
+cd ~/ros2_ws/src
+git clone <repository-url> AprilTag_Pose_ROS2
+```
+
+#### 3. VCS 의존성 가져오기
+
+```bash
+cd ~/ros2_ws
+vcs import src < src/AprilTag_Pose_ROS2/realsense-ros.repos
+```
+
+#### 4. 시스템 의존성 설치
+
+```bash
 sudo apt update
 sudo apt install -y \
-  build-essential \
-  cmake \
-  git \
-  python3-pip \
-  python3-colcon-common-extensions \
-  python3-rosdep
-
-# Vision 라이브러리
-sudo apt install -y \
-  libapriltag-dev \
-  libopencv-dev \
-  libeigen3-dev \
+  build-essential cmake git \
+  python3-pip python3-colcon-common-extensions python3-rosdep \
+  libapriltag-dev libopencv-dev libeigen3-dev \
   ros-humble-realsense2-*
 ```
 
-#### 3. Python 패키지 설치
+#### 5. Python 패키지 설치
 
 ```bash
-# ROS2 호환 setuptools 및 packaging
 pip3 install \
-  setuptools==58.2.0 \
-  packaging==21.3 \
-  wheel
-
-# Vision 관련 패키지 (NumPy는 반드시 <2.0)
-pip3 install \
+  setuptools==58.2.0 packaging==21.3 wheel \
   'numpy>=1.21.0,<2.0' \
   pyrealsense2==2.56.5.9235 \
   dt-apriltags==3.1.7 \
   opencv-python==4.10.0.84
 ```
 
-#### 4. 워크스페이스 생성 및 저장소 클론
+#### 6. ROS 의존성 설치
 
 ```bash
-# 워크스페이스 생성
-mkdir -p ~/vision_ws/src
-cd ~/vision_ws/src
-
-# 저장소 클론
-git clone <repository-url> Apriltag_Pose_ROS2
-```
-
-#### 5. ROS 의존성 설치
-
-```bash
-cd ~/vision_ws
+cd ~/ros2_ws
 rosdep update
 rosdep install --from-paths src --ignore-src -r -y
 ```
@@ -303,116 +325,90 @@ rosdep install --from-paths src --ignore-src -r -y
 
 ## 빌드
 
-### 전체 워크스페이스 빌드
+### 전체 빌드
 
 ```bash
-cd ~/vision_ws
+cd ~/ros2_ws
 colcon build
 source install/setup.bash
 ```
 
-### 특정 패키지만 빌드
+### 특정 패키지 빌드
 
 ```bash
 colcon build --packages-select apriltag_pose_estimator
 source install/setup.bash
 ```
 
-### 빌드 타입
+### 릴리스 빌드
 
 ```bash
-# 릴리스 최적화 빌드 (성능 중요 시)
 colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
-
-# 디버그 빌드
-colcon build --cmake-args -DCMAKE_BUILD_TYPE=Debug
-
-# 자세한 출력과 함께
-colcon build --event-handlers console_direct+
 ```
 
 ### 클린 빌드
 
 ```bash
-# 빌드 결과물 삭제
-cd ~/vision_ws
+cd ~/ros2_ws
 rm -rf build install log
-
-# 처음부터 재빌드
 colcon build
 source install/setup.bash
-```
-
-**Expected build output:**
-
-```
-Starting >>> apriltag_pose_estimator_msgs
-Starting >>> realsense2_camera
-Finished <<< apriltag_pose_estimator_msgs [5.2s]
-Starting >>> apriltag_pose_estimator
-Starting >>> apriltag_pose_visualizer
-Finished <<< realsense2_camera [8.1s]
-Finished <<< apriltag_pose_visualizer [8.3s]
-Finished <<< apriltag_pose_estimator [12.5s]
-
-Summary: 4 packages finished
 ```
 
 ---
 
 ## 실행
 
-### Complete System Launch
+### 전체 시스템 실행
 
-> ⚠️ **실행 순서 필수 준수**: `apriltag_estimator.launch.py`는 카메라를 포함하지 않습니다.
-> **반드시 터미널 1(카메라)을 먼저 실행**한 후 터미널 2(추정기)를 실행하세요.
+실행 순서를 반드시 준수하세요. `apriltag_estimator.launch.py`에는 카메라가 포함되어 있지 않습니다.
 
 ```bash
-# 터미널 1: RealSense 카메라 실행 (먼저 실행)
-source ~/vision_ws/install/setup.bash
+# 터미널 1: RealSense 카메라 실행 (먼저)
+source ~/ros2_ws/install/setup.bash
 ros2 launch realsense2_camera rs_launch.py \
   rgb_camera.color_profile:=1280x720x30 \
   enable_depth:=false
 
-# 터미널 2: AprilTag 포즈 추정기 실행 (카메라 실행 후)
-source ~/vision_ws/install/setup.bash
+# 터미널 2: AprilTag 포즈 추정기 실행
+source ~/ros2_ws/install/setup.bash
+ros2 launch apriltag_pose_estimator apriltag_estimator.launch.py
+
+# 터미널 3 (선택): 시각화 노드 실행
+source ~/ros2_ws/install/setup.bash
+ros2 run apriltag_pose_visualizer pose_visualizer_node
+```
+
+### 개별 노드 실행
+
+```bash
+# 커스텀 카메라 토픽 지정
 ros2 launch apriltag_pose_estimator apriltag_estimator.launch.py \
   camera_topic:=camera/camera/color/image_raw \
   camera_info_topic:=camera/camera/color/camera_info
 
-# 터미널 3 (선택): 시각화 노드 실행
-source ~/vision_ws/install/setup.bash
-ros2 run apriltag_pose_visualizer pose_visualizer_node
-```
-
-- Launch system ROS2 Graph
-  ![Launch_ROS_Graph](docs/launch_ros_graph.png)
-
-### Launch with Custom Configuration
-
-```bash
-# 카메라 해상도 변경
-ros2 launch realsense2_camera rs_launch.py \
-  rgb_camera.color_profile:=640x480x60
-
-# AprilTag 크기 및 family 변경
+# 태그 파라미터 변경
 ros2 launch apriltag_pose_estimator apriltag_estimator.launch.py \
   tag_size:=0.05 \
   tag_family:=tag36h11
 
-# 커스텀 YAML 설정 파일 사용
+# 커스텀 설정 파일 사용
 ros2 launch apriltag_pose_estimator apriltag_estimator.launch.py \
   config_file:=/path/to/custom_config.yaml
+
+# GUI 윈도우 비활성화 (Docker / headless 환경)
+ros2 launch apriltag_pose_estimator apriltag_estimator.launch.py \
+  show_service_result_window:=false
 ```
 
-### Docker Execution
+### Docker 실행
 
 ```bash
-# Docker 컨테이너 실행
-cd ~/Apriltag_Pose_ROS2/docker
+cd ~/AprilTag_Pose_ROS2/docker
 ./run.sh
 
-# 컨테이너 내부에서
+# 컨테이너 내부
+cd /ros2_ws
 colcon build && source install/setup.bash
 ros2 launch realsense2_camera rs_launch.py
 ```
@@ -421,53 +417,54 @@ ros2 launch realsense2_camera rs_launch.py
 
 ## 사용법
 
-### Basic Workflow
+### 워크플로우
 
-1. **카메라 연결 확인**
+```
+카메라 연결 확인 ──▶ 시스템 실행 ──▶ 토픽 모니터링 ──▶ 서비스 호출
+       │                  │                  │                 │
+  rs-enumerate       launch x2         topic echo         service call
+    -devices         (cam + est)       /target_poses    /target_point_pose
+```
 
-   ```bash
-   # RealSense 디바이스 확인
-   rs-enumerate-devices
-   ```
-
-2. **시스템 실행**
-
-   ```bash
-   # 카메라 스트리밍 시작
-   ros2 launch realsense2_camera rs_launch.py
-
-   # 포즈 추정 시작
-   ros2 launch apriltag_pose_estimator apriltag_estimator.launch.py
-   ```
-
-3. **토픽 모니터링**
-
-   ```bash
-   # 활성 토픽 확인
-   ros2 topic list
-
-   # 검출된 포즈 확인
-   ros2 topic echo /pose_estimator_node/target_poses
-
-   # 카메라 이미지 확인
-   ros2 run rqt_image_view rqt_image_view
-   ```
-
-4. **서비스 호출**
-   ```bash
-   # 현재 포즈 쿼리
-   ros2 service call /pose_estimator_node/target_point_pose \
-     apriltag_pose_estimator_msgs/srv/TargetPointPose \
-     "{request_time: {sec: 0, nanosec: 0}}"
-   ```
-
-### Visualization in RViz
+#### 1. 카메라 연결 확인
 
 ```bash
-# RViz2 실행
-rviz2
+rs-enumerate-devices
+```
 
-# Add → By topic → /visualization_markers → MarkerArray
+#### 2. 시스템 실행
+
+```bash
+ros2 launch realsense2_camera rs_launch.py
+ros2 launch apriltag_pose_estimator apriltag_estimator.launch.py
+```
+
+#### 3. 토픽 모니터링
+
+```bash
+# 활성 토픽 확인
+ros2 topic list
+
+# 검출된 포즈 확인
+ros2 topic echo /pose_estimator_node/target_poses
+
+# 이미지 확인
+ros2 run rqt_image_view rqt_image_view
+```
+
+#### 4. 서비스 호출
+
+```bash
+ros2 service call /pose_estimator_node/target_point_pose \
+  apriltag_pose_estimator_msgs/srv/TargetPointPose \
+  "{request_time: {sec: 0, nanosec: 0}}"
+```
+
+#### 5. RViz2 시각화
+
+```bash
+rviz2
+# Add > By topic > /visualization_markers > MarkerArray
 # Fixed Frame: camera_color_optical_frame
 ```
 
@@ -475,239 +472,225 @@ rviz2
 
 ## 설정
 
-### Camera Configuration
+### pose_estimator.yaml
 
-`realsense2_camera`는 launch 인수로 직접 파라미터를 전달합니다:
-
-```bash
-ros2 launch realsense2_camera rs_launch.py \
-  rgb_camera.color_profile:=1280x720x30 \
-  enable_depth:=false \
-  rgb_camera.enable_auto_exposure:=true
-```
-
-### Pose Estimator Configuration
-
-[apriltag_pose_estimator/config/pose_estimator.yaml](apriltag_pose_estimator/config/pose_estimator.yaml) 편집:
+[apriltag_pose_estimator/config/pose_estimator.yaml](apriltag_pose_estimator/config/pose_estimator.yaml)
 
 ```yaml
 pose_estimator_node:
   ros__parameters:
-    # AprilTag Detection
-    marker_ids: [0, 1, 2] # Tag IDs to detect
-    base_marker_id: 1 # Reference marker (-1: use first)
-    tag_size: 0.02778 # Tag size in meters (27.78mm)
-    tag_family: "tagStandard41h12" # tag36h11, tagStandard41h12
-    marker_offsets: [0.065, 0.0] # [X, Y] offset between tags (m)
+    # AprilTag 설정
+    marker_ids: [0, 1, 2] # 검출할 태그 ID 목록
+    base_marker_id: 1 # 기준 마커 ID (-1: 첫 번째 마커)
+    tag_size: 0.02778 # 태그 크기 (m)
+    tag_family: "tagStandard41h12" # 태그 패밀리 (tag36h11 | tagStandard41h12)
+    marker_offsets: [0.065, 0.0] # 마커 간 [X, Y] 간격 (m)
 
-    # Target Points (position + rotation)
-    # Format: [x, y, z, roll, pitch, yaw, ...]
+    # 타겟 포인트 (x, y, z, roll, pitch, yaw) x N
     target_points: [
-        0.000,
-        0.000,
-        0.000,
-        0.000,
-        0.000,
+        0.0000,
+        0.0000,
+        0.0000,
+        0.0000,
+        0.0000,
         0.0000, # Point 0
-        0.000,
-        0.000,
-        0.000,
-        0.000,
-        0.000,
-        1.5708, # Point 1 (90° yaw)
+        0.0000,
+        0.0000,
+        0.0000,
+        0.0000,
+        0.0000,
+        0.0000,
+        1.5708, # Point 1 (90 deg yaw)
       ]
 
-    # Input Topics
+    # 입력 토픽
     camera_topic: "camera/camera/color/image_raw"
     camera_info_topic: "camera/camera/color/camera_info"
+    camera_frame: "camera_color_optical_frame"
 
-    # Publishing Options
-    publish_visualization: true # RViz markers
-    publish_detection_image: true # Annotated image
+    # 출력 옵션
+    publish_visualization: true # RViz2 마커 퍼블리시
+    publish_detection_image: true # 검출 오버레이 이미지 퍼블리시
+    show_service_result_window: false # 서비스 결과 OpenCV 윈도우 (headless 시 false)
 ```
 
 ### 주요 파라미터 설명
 
-- **tag_size**: 실제 AprilTag의 검은색 사각형 크기를 미터 단위로 측정 (정확도에 매우 중요!)
-- **marker_offsets**: 마커 중심 간의 실제 물리적 거리 [X, Y] (미터)
-- **target_points**: 베이스 마커를 기준으로 한 타겟 포인트의 상대적 위치 및 회전
+- **tag_size**: AprilTag 검은색 사각형의 한 변 길이(m). 정확도에 직접적으로 영향
+- **marker_offsets**: 마커 중심 간 실제 물리적 거리 `[X, Y]` (m)
+- **target_points**: 베이스 마커 기준 타겟 포인트의 상대 위치 및 회전 (라디안)
+
+### Launch 인수
+
+| 인수                         | 기본값                | 설명                          |
+| ---------------------------- | --------------------- | ----------------------------- |
+| `config_file`                | `pose_estimator.yaml` | YAML 설정 파일 경로           |
+| `show_service_result_window` | `""` (YAML 값 사용)   | 서비스 결과 윈도우 표시 여부  |
+| `camera_topic`               | `""` (YAML 값 사용)   | 카메라 이미지 토픽 오버라이드 |
+| `camera_info_topic`          | `""` (YAML 값 사용)   | 카메라 정보 토픽 오버라이드   |
+| `tag_family`                 | `""` (YAML 값 사용)   | 태그 패밀리 오버라이드        |
+| `tag_size`                   | `""` (YAML 값 사용)   | 태그 크기 오버라이드          |
 
 ---
 
-## ROS2 인터페이스
+## API / 인터페이스
 
-### Nodes
+### 노드
 
-| Node Name              | Type   | Package                  | Description                  |
+| 노드                   | 언어   | 패키지                   | 설명                         |
 | ---------------------- | ------ | ------------------------ | ---------------------------- |
 | `realsense_node`       | C++    | realsense2_camera        | RealSense 카메라 스트리밍    |
 | `pose_estimator_node`  | C++    | apriltag_pose_estimator  | AprilTag 검출 및 포즈 추정   |
 | `pose_visualizer_node` | Python | apriltag_pose_visualizer | 검출 결과 시각화 및 RPY 계산 |
 
-### Topics
+### Published 토픽
 
-#### Published Topics
+| 토픽                                   | 타입                                        | 퍼블리셔            | 설명                  |
+| -------------------------------------- | ------------------------------------------- | ------------------- | --------------------- |
+| `/color/image_raw`                     | `sensor_msgs/Image`                         | realsense_node      | RGB 카메라 이미지     |
+| `/color/camera_info`                   | `sensor_msgs/CameraInfo`                    | realsense_node      | 카메라 내부 파라미터  |
+| `/pose_estimator_node/tag_detections`  | `apriltag_pose_estimator_msgs/TagDetection` | pose_estimator_node | 태그 검출 데이터      |
+| `/pose_estimator_node/target_poses`    | `geometry_msgs/PoseArray`                   | pose_estimator_node | 타겟 포인트 포즈 배열 |
+| `/pose_estimator_node/detection_image` | `sensor_msgs/Image`                         | pose_estimator_node | 검출 오버레이 이미지  |
+| `/visualization_markers`               | `visualization_msgs/MarkerArray`            | pose_estimator_node | RViz2 시각화 마커     |
 
-| Topic                                  | Type                                        | Publisher           | Description                            |
-| -------------------------------------- | ------------------------------------------- | ------------------- | -------------------------------------- |
-| `/color/image_raw`                     | `sensor_msgs/Image`                         | realsense_node      | RGB 카메라 이미지 (BGR8)               |
-| `/color/camera_info`                   | `sensor_msgs/CameraInfo`                    | realsense_node      | 카메라 내부 파라미터                   |
-| `/pose_estimator_node/tag_detections`  | `apriltag_pose_estimator_msgs/TagDetection` | pose_estimator_node | AprilTag 검출 데이터 (visualization용) |
-| `/pose_estimator_node/target_poses`    | `geometry_msgs/PoseArray`                   | pose_estimator_node | 타겟 포인트 포즈 배열                  |
-| `/visualization_markers`               | `visualization_msgs/MarkerArray`            | pose_estimator_node | RViz 시각화 마커                       |
-| `/pose_estimator_node/detection_image` | `sensor_msgs/Image`                         | pose_estimator_node | 검출 결과 오버레이 이미지              |
+### Subscribed 토픽
 
-#### Subscribed Topics
-
-| Topic                              | Type                     | Subscriber          | Description              |
+| 토픽                               | 타입                     | 서브스크라이버      | 설명                     |
 | ---------------------------------- | ------------------------ | ------------------- | ------------------------ |
 | `/camera/camera/color/image_raw`   | `sensor_msgs/Image`      | pose_estimator_node | 입력 카메라 이미지       |
 | `/camera/camera/color/camera_info` | `sensor_msgs/CameraInfo` | pose_estimator_node | 카메라 캘리브레이션 정보 |
 
-### Services
+### 서비스
 
-| Service                                  | Type                                               | Provider            | Description               |
-| ---------------------------------------- | -------------------------------------------------- | ------------------- | ------------------------- |
-| `/pose_estimator_node/target_point_pose` | `apriltag_pose_estimator_msgs/srv/TargetPointPose` | pose_estimator_node | 최신 검출 포즈 쿼리       |
-| `/realsense_node/get_device_info`        | `std_srvs/srv/Trigger`                             | realsense_node      | 카메라 디바이스 정보 조회 |
+| 서비스                                   | 타입              | 제공자              | 설명                |
+| ---------------------------------------- | ----------------- | ------------------- | ------------------- |
+| `/pose_estimator_node/target_point_pose` | `TargetPointPose` | pose_estimator_node | 최신 검출 포즈 쿼리 |
 
-### Parameters
-
-| Parameter               | Type      | Default              | Description                  |
-| ----------------------- | --------- | -------------------- | ---------------------------- |
-| `marker_ids`            | list[int] | `[0, 1, 2]`          | 사용할 AprilTag 마커 ID 목록 |
-| `base_marker_id`        | int       | `1`                  | 베이스 마커 ID               |
-| `tag_size`              | double    | `0.02778`            | AprilTag 크기 (m)            |
-| `tag_family`            | string    | `"tagStandard41h12"` | AprilTag family              |
-| `frame_rate`            | int       | `30`                 | 카메라 프레임 레이트 (Hz)    |
-| `publish_visualization` | bool      | `true`               | RViz 마커 퍼블리시 여부      |
-
-### Custom Messages
+### 커스텀 메시지
 
 **TagDetection.msg:**
 
 ```msg
-bool       tag_detected    # Tag detected flag
-float64[9] camera_matrix   # 3x3 intrinsic matrix (row-major)
-float64[]  dist_coeffs     # OpenCV distortion coefficients
-float64[3] rvec            # Rodrigues rotation vector
-float64[3] tvec            # Translation vector (meters)
-float64    tag_size        # Tag size (meters)
+bool       tag_detected    # 태그 검출 플래그
+float64[9] camera_matrix   # 3x3 내부 파라미터 행렬 (row-major)
+float64[]  dist_coeffs     # 왜곡 계수 (OpenCV 순서)
+float64[3] rvec            # Rodrigues 회전 벡터
+float64[3] tvec            # 병진 벡터 (m)
+float64    tag_size        # 태그 크기 (m)
 ```
 
 **TargetPointPose.srv:**
 
 ```srv
 # Request
-builtin_interfaces/Time request_time
+builtin_interfaces/Time request_time    # 요청 시각
 ---
 # Response
-bool success                        # Success flag
-string message                      # Status message
-builtin_interfaces/Time data_time   # Data timestamp
-geometry_msgs/PoseArray poses       # Target poses
+bool success                            # 성공 여부
+string message                          # 상태 메시지
+builtin_interfaces/Time data_time       # 데이터 타임스탬프
+geometry_msgs/PoseArray poses           # 타겟 포즈 배열
 ```
+
+### 네트워크 구성 (Docker)
+
+| 항목          | 값               | 설명                  |
+| ------------- | ---------------- | --------------------- |
+| Network mode  | `host`           | 호스트 네트워크 공유  |
+| ROS_DOMAIN_ID | `99`             | ROS2 도메인 ID        |
+| IPC           | `host`           | IPC 네임스페이스 공유 |
+| X11           | `/tmp/.X11-unix` | GUI 포워딩            |
 
 ---
 
 ## 문제 해결
 
-### 1. Camera Issues
+### 1. "No RealSense devices detected"
 
-#### 1-1. Problem: "No RealSense devices detected"
-
-**Solution:**
-
-```bash
-# Check USB connection
-lsusb | grep Intel
-
-# Check RealSense kernel module
-sudo modprobe uvcvideo
-
-# Test camera directly
-realsense-viewer
-
-# Check permissions
-sudo usermod -aG video $USER
-sudo usermod -aG plugdev $USER
-# Log out and log back in
+```
+[ERROR] No RealSense devices were found!
 ```
 
-#### 1-2. Problem: "Failed to set USB power"
+```bash
+# USB 연결 확인
+lsusb | grep Intel
 
-**Solution:**
+# 커널 모듈 로드
+sudo modprobe uvcvideo
 
-- USB 3.0 포트 사용 (파란색 포트)
-- 카메라 재연결
-- 다른 USB 케이블 시도 (반드시 USB 3.0 케이블)
+# 권한 설정
+sudo usermod -aG video $USER
+sudo usermod -aG plugdev $USER
+# 로그아웃 후 재로그인
+```
 
-### 2. AprilTag Detection Issues
+### 2. "No AprilTags detected"
 
-#### 2-1. Problem: "No AprilTags detected"
+```
+[WARN] No tags detected in current frame
+```
 
-**Solution:**
+```bash
+# 확인 사항:
+# - 조명: 밝고 균일한 조명 (그림자 최소화)
+# - 초점: 카메라 초점이 태그에 맞춰져 있는지 확인
+# - 거리: 카메라-태그 간 0.3m ~ 3m 권장
+# - 각도: 태그가 카메라를 향하도록 (< 45도)
 
-1. **조명 확인**: 밝고 균일한 조명 필요 (그림자 최소화)
-2. **초점 확인**: 카메라 초점이 태그에 맞춰져야 함
-3. **태그 크기 확인**:
-   ```yaml
-   # config/pose_estimator.yaml에서 실제 크기와 일치하는지 확인
-   tag_size: 0.02778 # 27.78mm in meters
-   ```
-4. **태그 family 확인**: 실제 인쇄한 태그와 설정이 일치해야 함
-5. **거리**: 카메라에서 태그까지 0.3m ~ 3m 권장
-6. **각도**: 태그가 카메라를 향하도록 (각도 < 45°)
+# config에서 태그 크기와 패밀리가 실제와 일치하는지 확인
+# tag_size: 0.02778  (실측값을 미터 단위로)
+# tag_family: 'tagStandard41h12'  (인쇄한 태그와 동일해야 함)
+```
 
-#### 2-2. Problem: "Pose estimation failed - not all markers detected"
+### 3. 포즈 불안정/지터링
 
-**Solution:**
+```
+# 포즈 추정값이 크게 흔들리는 경우
+```
 
-- `marker_ids: [0, 1, 2]`에 지정된 모든 태그가 카메라에 보여야 함
-- 부분 가림(occlusion) 최소화
-- marker_ids를 단일 마커로 줄여서 테스트: `marker_ids: [1]`
+```bash
+# 1. tag_size 값이 실측치와 정확히 일치하는지 확인 (mm -> m 변환 주의)
+# 2. marker_offsets 값이 마커 간 실제 거리와 일치하는지 확인
+# 3. 해상도를 높이거나 프레임 레이트를 낮춰서 이미지 품질 개선
+ros2 launch realsense2_camera rs_launch.py \
+  rgb_camera.color_profile:=1280x720x15
+```
 
-#### 2-3. Problem: "Pose가 불안정하거나 지터링(떨림)"
+### 4. "Could not find libapriltag-dev"
 
-**Solution:**
-
-1. **카메라 캘리브레이션**: 카메라 내부 파라미터가 정확한지 확인
-2. **태그 크기**: `tag_size` 값이 정확한지 확인 (mm → m 변환 주의)
-3. **마커 오프셋**: `marker_offsets` 값이 실제 거리와 일치하는지 확인
-4. **이미지 품질**: 해상도를 높이거나 프레임 레이트를 낮춤
-
-### 3. Build Issues
-
-#### 3-1. Problem: "Could not find libapriltag-dev"
+```
+CMake Error: Could not find libapriltag
+```
 
 ```bash
 sudo apt update
 sudo apt install -y libapriltag-dev
 
-# If still not found:
-sudo apt install -y software-properties-common
+# 여전히 실패 시
 sudo add-apt-repository universe
 sudo apt update
 sudo apt install -y libapriltag-dev
 ```
 
-#### 3-2. Problem: "cv_bridge NumPy version conflict"
+### 5. cv_bridge NumPy 버전 충돌
+
+```
+ImportError: numpy.core.multiarray failed to import
+```
 
 ```bash
-# NumPy must be <2.0 for cv_bridge compatibility
 pip3 install 'numpy>=1.21.0,<2.0'
 ```
 
 ---
 
-## 자주 묻는 질문
-
----
-
 ## 라이선스
 
-이 프로젝트는 MIT 라이선스로 배포됩니다 - 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.
+이 프로젝트는 MIT 라이선스로 배포됩니다. 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.
 
 ---
 
-**Maintainer**: hhanoo (woo980711@gmail.com)
+## Maintainer
+
+**hhanoo** (woo980711@gmail.com)
