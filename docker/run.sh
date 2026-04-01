@@ -26,9 +26,17 @@ docker run -it --rm \
     --privileged \
     --network host \
     --ipc=host \
-    -e ROS_DOMAIN_ID=99 \
+    --user $(id -u):$(id -g) \
+    -e HOME=/home/developer \
+    -e USER="$(id -un)" \
+    -e LOGNAME="$(id -un)" \
+    -e ROS_LOG_DIR=/tmp/ros_log \
+    -e ROS_DOMAIN_ID=$ROS_DOMAIN_ID \
     -e DISPLAY=$DISPLAY \
     -e QT_X11_NO_MITSHM=1 \
+    -v /etc/passwd:/etc/passwd:ro \
+    -v /etc/group:/etc/group:ro \
+    -v /dev:/dev \
     -v /tmp/.X11-unix:/tmp/.X11-unix \
     -v $ROS2_WS_ROOT:/ros2_ws \
     --name $CONTAINER_NAME \
