@@ -511,7 +511,11 @@ pose_estimator_node:
     # 출력 옵션
     publish_visualization: true # RViz2 마커 퍼블리시
     publish_detection_image: true # 검출 오버레이 이미지 퍼블리시
+
+    # 서비스 옵션
     show_service_result_window: false # 서비스 결과 OpenCV 윈도우 (headless 시 false)
+    display_width: 0 # 결과 윈도우 너비 (0 = 원본 크기)
+    display_height: 0 # 결과 윈도우 높이 (0 = 원본 크기)
 ```
 
 ### 주요 파라미터 설명
@@ -519,6 +523,7 @@ pose_estimator_node:
 - **tag_size**: AprilTag 검은색 사각형의 한 변 길이(m). 정확도에 직접적으로 영향
 - **marker_offsets**: 마커 중심 간 실제 물리적 거리 `[X, Y]` (m)
 - **target_points**: 베이스 마커 기준 타겟 포인트의 상대 위치 및 회전 (라디안)
+- **display_width / display_height**: 서비스 결과 윈도우 크기. `0`이면 원본 해상도 그대로 표시
 
 ### Launch 인수
 
