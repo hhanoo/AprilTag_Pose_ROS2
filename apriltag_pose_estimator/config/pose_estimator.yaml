@@ -43,4 +43,6 @@ pose_estimator_node:
     # Service Options
     # =========================================================
     show_service_result_window: false # Show OpenCV window on service call (set false in Docker/headless)
+    display_width: 0                  # Display window width (0 = original size)
+    display_height: 0                 # Display window height (0 = original size)
 

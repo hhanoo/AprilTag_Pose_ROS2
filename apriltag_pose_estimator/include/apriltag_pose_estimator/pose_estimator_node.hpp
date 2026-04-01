@@ -95,6 +95,8 @@ class PoseEstimatorNode : public rclcpp::Node {
     std::vector<double>      target_points_flat_;          // Target points (Nx6 flat list)
     std::vector<TargetPoint> target_points_;               // Target points
     bool                     show_service_result_window_;  // Show result window on service call
+    int                      display_width_;               // Display window width (0 = original)
+    int                      display_height_;              // Display window height (0 = original)
 
     // ========================================================================
     // Topic Names

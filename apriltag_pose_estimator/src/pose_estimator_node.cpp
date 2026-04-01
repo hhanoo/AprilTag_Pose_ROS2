@@ -26,6 +26,8 @@ PoseEstimatorNode::PoseEstimatorNode()
                                                  0.000, 0.000, 0.000, 0.000, 0.000, 0.000   // Point 2 (x y z r p y)
                                              });
     this->declare_parameter("show_service_result_window", false);
+    this->declare_parameter("display_width", 0);
+    this->declare_parameter("display_height", 0);
     // * Input topics
     this->declare_parameter("camera_topic", "realsense_node/color/image_raw");
     this->declare_parameter("camera_info_topic", "realsense_node/color/camera_info");
@@ -44,6 +46,8 @@ PoseEstimatorNode::PoseEstimatorNode()
     marker_offsets_             = this->get_parameter("marker_offsets").as_double_array();
     target_points_flat_         = this->get_parameter("target_points").as_double_array();
     show_service_result_window_ = this->get_parameter("show_service_result_window").as_bool();
+    display_width_              = this->get_parameter("display_width").as_int();
+    display_height_             = this->get_parameter("display_height").as_int();
 
     // * Input topics
     camera_topic_      = this->get_parameter("camera_topic").as_string();
@@ -346,7 +350,13 @@ void PoseEstimatorNode::targetPointPoseServiceCallback(
                     txt_y += 30;
                 }
 
-                cv::imshow("AprilTag Pose Estimator Result", display_image);
+                if (display_width_ > 0 && display_height_ > 0) {
+                    cv::Mat display_resized;
+                    cv::resize(display_image, display_resized, cv::Size(display_width_, display_height_));
+                    cv::imshow("AprilTag Pose Estimator Result", display_resized);
+                } else {
+                    cv::imshow("AprilTag Pose Estimator Result", display_image);
+                }
                 cv::waitKey(1);
             } catch (const cv::Exception& e) {
                 RCLCPP_WARN_THROTTLE(
