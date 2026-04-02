@@ -312,14 +312,14 @@ rosdep install --from-paths src --ignore-src -r -y
 
 ```bash
 cd ~/ros2_ws
-colcon build
+colcon build --symlink-install
 source install/setup.bash
 ```
 
 ### 특정 패키지 빌드
 
 ```bash
-colcon build --packages-select apriltag_pose_estimator
+colcon build --symlink-install --packages-select apriltag_pose_estimator
 source install/setup.bash
 ```
 
@@ -334,7 +334,7 @@ colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
 ```bash
 cd ~/ros2_ws
 rm -rf build install log
-colcon build
+colcon build --symlink-install
 source install/setup.bash
 ```
 
@@ -396,16 +396,16 @@ colcon build && source install/setup.bash
 ros2 launch realsense2_camera rs_launch.py
 ```
 
-Docker alias 목록:
+전체 alias 정의는 [aliases.sh](docker/aliases.sh)를 참고하세요.
 
-| Alias       | 명령어                                           | 설명                    |
-| ----------- | ------------------------------------------------ | ----------------------- |
-| `run_cam`   | `ros2 launch realsense2_camera rs_launch.py ...` | RealSense 카메라 실행   |
-| `run_est`   | `ros2 launch apriltag_pose_estimator ...`        | 포즈 추정기 실행        |
-| `run_viz`   | `ros2 run apriltag_pose_visualizer ...`          | 시각화 노드 실행        |
-| `echo_pose` | `ros2 topic echo /pose_estimator_node/...`       | 포즈 토픽 모니터링      |
-| `call_pose` | `ros2 service call /pose_estimator_node/...`     | 포즈 서비스 호출        |
-| `cmd_help`  | -                                                | 사용 가능한 명령어 목록 |
+| Alias       | 설명                   | 참고                                                                                                   |
+| ----------- | ---------------------- | ------------------------------------------------------------------------------------------------------ |
+| `run_cam`   | RealSense 카메라 실행  | [rs_launch.py](https://github.com/realsenseai/realsense-ros/tree/ros2-master/realsense2_camera/launch) |
+| `run_est`   | 포즈 추정기 실행       | [apriltag_estimator.launch.py](apriltag_pose_estimator/launch/apriltag_estimator.launch.py)            |
+| `run_viz`   | 시각화 노드 실행       | [pose_visualizer_node.py](apriltag_pose_visualizer/apriltag_pose_visualizer/pose_visualizer_node.py)   |
+| `echo_pose` | 포즈 토픽 모니터링     | --                                                                                                     |
+| `call_pose` | 포즈 서비스 호출       | [TargetPointPose.srv](apriltag_pose_estimator_msgs/srv/TargetPointPose.srv)                            |
+| `cmd_help`  | 사용 가능한 alias 목록 | 컨테이너 접속 시 자동 출력                                                                             |
 
 ---
 
