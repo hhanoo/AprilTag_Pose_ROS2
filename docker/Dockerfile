@@ -82,12 +82,23 @@ RUN groupadd -f plugdev && \
     usermod -aG dialout root && \
     usermod -aG video root
 
+
+# Developer HOME directory --------------------------------------------------
+RUN mkdir -p /home/developer && chmod 1777 /home/developer
+ENV HOME=/home/developer
+
 # Setup workspace -----------------------------------------------------------
 WORKDIR /ros2_ws
 
-# ROS auto source (no venv) -------------------------------------------------
-RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc && \
-    echo "if [ -f /ros2_ws/install/setup.bash ]; then source /ros2_ws/install/setup.bash; fi" >> /root/.bashrc
+# Aliases ---------------------------------------------------------------
+COPY ./aliases.sh /etc/profile.d/aliases.sh
+RUN chmod 644 /etc/profile.d/aliases.sh && \
+    echo 'source /etc/profile.d/aliases.sh' >> /etc/bash.bashrc
 
-# Default command -----------------------------------------------------------
+# Entrypoint ---------------------------------------------------------------
+COPY ./entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
+
+# Default command ----------------------------------------------------------
 CMD ["bash"]

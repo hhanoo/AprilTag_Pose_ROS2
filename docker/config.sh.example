@@ -1,2 +1,3 @@
 IMAGE_NAME="apriltag-pose-ros2-humble"
 CONTAINER_NAME="apriltag-pose-ros2-humble"
+ROS_DOMAIN_ID="98"

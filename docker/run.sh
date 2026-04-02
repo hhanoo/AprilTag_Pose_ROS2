@@ -40,7 +40,7 @@ docker run -it --rm \
     -v /tmp/.X11-unix:/tmp/.X11-unix \
     -v $ROS2_WS_ROOT:/ros2_ws \
     --name $CONTAINER_NAME \
-    $IMAGE_NAME \
+    $IMAGE_NAME
 
 # Disable X11 access after container exit
 echo "Disabling X11 access after container exit..."
