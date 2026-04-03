@@ -1,3 +1,9 @@
-IMAGE_NAME="apriltag-pose-ros2-humble"
+# Docker image name (used in build.sh and run.sh)
+# - Default: Docker Hub pre-built image
+# - For local build: change to "apriltag-pose-ros2-humble" and run ./build.sh
+IMAGE_NAME="hhanoo/project:apriltag-pose-ros2-humble"
+
+# Docker container name (used in run.sh)
 CONTAINER_NAME="apriltag-pose-ros2-humble"
+
 ROS_DOMAIN_ID="98"

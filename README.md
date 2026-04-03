@@ -169,17 +169,19 @@ AprilTag_Pose_ROS2/
 ### Option 1: Docker (권장)
 
 ```bash
-# 1. Docker 이미지 빌드 및 컨테이너 실행
-cd docker
-./build.sh
+# 1. Docker 이미지 가져오기
+docker pull hhanoo/project:apriltag-pose-ros2-humble
+
+# 2. 컨테이너 실행 (X11 포워딩 포함)
+cd AprilTag_Pose_ROS2/docker
 ./run.sh
 
-# 2. 컨테이너 내부에서 의존성 가져오기 및 빌드
+# 3. 컨테이너 내부에서 의존성 가져오기 및 빌드
 cd /ros2_ws
 vcs import src < src/AprilTag_Pose_ROS2/realsense-ros.repos
 colcon build
 
-# 3. 실행 (터미널 2개)
+# 4. 실행 (터미널 2개)
 run_cam   # ros2 launch realsense2_camera rs_launch.py ...
 run_est   # ros2 launch apriltag_pose_estimator apriltag_estimator.launch.py
 ```
@@ -253,13 +255,33 @@ ros2 launch apriltag_pose_estimator apriltag_estimator.launch.py
 Docker를 사용하면 모든 의존성이 자동으로 설치됩니다.
 
 ```bash
-cd docker
-# 이미지 빌드
-./build.sh
+# 1. Docker 이미지 가져오기
+docker pull hhanoo/project:apriltag-pose-ros2-humble
 
-# 컨테이너 실행
+# 2. 컨테이너 실행
+cd AprilTag_Pose_ROS2/docker
 ./run.sh
 ```
+
+<details>
+<summary>직접 빌드 (개발자용)</summary>
+
+```bash
+# 0. 프로젝트 루트로 이동
+cd AprilTag_Pose_ROS2/docker
+
+# 1. 설정 파일 생성 후 IMAGE_NAME을 로컬 이름으로 변경
+cp config.sh.example config.sh
+# config.sh에서 IMAGE_NAME="apriltag-pose-ros2-humble" 로 수정
+
+# 2. Docker 이미지 빌드
+./build.sh
+
+# 3. 컨테이너 실행
+./run.sh
+```
+
+</details>
 
 ### Method 2: Native
 
@@ -387,6 +409,7 @@ ros2 launch apriltag_pose_estimator apriltag_estimator.launch.py \
 ### Docker 실행
 
 ```bash
+docker pull hhanoo/project:apriltag-pose-ros2-humble
 cd docker
 ./run.sh
 
@@ -465,6 +488,19 @@ rviz2
 ---
 
 ## 설정
+
+### Docker 설정
+
+[config.sh](docker/config.sh.example)
+
+```bash
+IMAGE_NAME="hhanoo/project:apriltag-pose-ros2-humble"  # Docker Hub 이미지 (기본값)
+CONTAINER_NAME="apriltag-pose-ros2-humble"              # Docker 컨테이너 이름
+```
+
+> `run.sh` 실행 전 `docker pull hhanoo/project:apriltag-pose-ros2-humble`로 이미지를 가져오세요.
+>
+> 직접 빌드하려면 `IMAGE_NAME`을 `"apriltag-pose-ros2-humble"` 등으로 변경 후 `./build.sh`를 실행하세요.
 
 ### pose_estimator.yaml
 

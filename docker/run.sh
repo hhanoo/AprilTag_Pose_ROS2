@@ -12,7 +12,9 @@ source "$SCRIPT_DIR/config.sh"
 
 # Check if the image exists
 if ! docker image inspect $IMAGE_NAME > /dev/null 2>&1; then
-    echo "Error: Image $IMAGE_NAME not found. Please run ./build.sh first."
+    echo "Error: Image $IMAGE_NAME not found."
+    echo "Pull the image first: docker pull $IMAGE_NAME"
+    echo "Or build locally: ./build.sh"
     exit 1
 fi
 
