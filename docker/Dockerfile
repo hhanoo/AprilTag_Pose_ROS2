@@ -82,12 +82,7 @@ RUN groupadd -f plugdev && \
     usermod -aG dialout root && \
     usermod -aG video root
 
-
-# Developer HOME directory --------------------------------------------------
-RUN mkdir -p /home/developer && chmod 1777 /home/developer
-ENV HOME=/home/developer
-
-# Setup workspace -----------------------------------------------------------
+# Setup workspace ----------------------------------------------------------
 WORKDIR /ros2_ws
 
 # Aliases ---------------------------------------------------------------
