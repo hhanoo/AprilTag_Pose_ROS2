@@ -519,14 +519,20 @@ pose_estimator_node:
 
     # 타겟 포인트 (x, y, z, roll, pitch, yaw) x N
     target_points: [
-         0.000, 0.000, 0.000,  0.000, 0.000, 0.0000,    # Point 0 (x y z r p y)
-         0.000, 0.000, 0.000,  0.000, 0.000, 1.5708,    # Point 1 (x y z r p y)
+         0.000, 0.000, 0.000,  0.000, 0.000, 0.0000,  # Point 0 (x y z r p y)
+         0.000, 0.000, 0.000,  0.000, 0.000, 1.5708,  # Point 1 (x y z r p y)
     ]
 
     # 입력 토픽
-    camera_topic: 'camera/camera/color/image_raw'        # 카메라 이미지 입력
-    camera_info_topic: 'camera/camera/color/camera_info' # 카메라 정보 입력
+    camera_topic: 'camera/camera/color/image_raw'         # 카메라 이미지 입력
+    camera_info_topic: 'camera/camera/color/camera_info'  # 카메라 정보 입력
     camera_frame: 'camera_color_optical_frame'
+
+    # 왜곡 처리
+    #   false: rectified 이미지 사용 (왜곡 없음) — RealSense D4xx color 기본값
+    #   true : raw 이미지 사용, camera_info.d 의 왜곡 계수로 PnP 수행
+    #          — Orbbec Femto Bolt 등 raw 이미지를 구독할 때 필요
+    use_distortion_from_camera_info: false
 
     # 출력 옵션
     publish_visualization: true         # RViz2 마커 퍼블리시
@@ -543,6 +549,9 @@ pose_estimator_node:
 - **tag_size**: AprilTag 검은색 사각형의 한 변 길이(m). 정확도에 직접적으로 영향
 - **marker_offsets**: 마커 중심 간 실제 물리적 거리 `[X, Y]` (m)
 - **target_points**: 베이스 마커 기준 타겟 포인트의 상대 위치 및 회전 (라디안)
+- **use_distortion_from_camera_info**: PnP 시 사용할 왜곡 계수 소스 선택
+  - `false` (기본): 왜곡 계수를 0 으로 간주. 이미 rectified 된 이미지(RealSense D4xx color 등)에 사용
+  - `true`: `camera_info.d` 의 값을 그대로 사용. raw 이미지를 구독하는 카메라(Orbbec Femto Bolt 등)에 사용
 - **display_width / display_height**: 서비스 결과 윈도우 크기. `0`이면 원본 해상도 그대로 표시
 
 ### Launch 인수
