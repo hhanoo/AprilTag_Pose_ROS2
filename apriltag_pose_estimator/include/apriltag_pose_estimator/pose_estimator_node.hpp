@@ -79,10 +79,11 @@ class PoseEstimatorNode : public rclcpp::Node {
     // ========================================================================
     // Camera Info
     // ========================================================================
-    cv::Mat     camera_matrix_;         // Camera intrinsic matrix (3x3)
-    cv::Mat     dist_coeffs_;           // Distortion coefficients
-    bool        camera_info_received_;  // Camera info received flag
-    std::string camera_frame_;          // Camera frame ID
+    cv::Mat     camera_matrix_;                    // Camera intrinsic matrix (3x3)
+    cv::Mat     dist_coeffs_;                      // Distortion coefficients
+    bool        camera_info_received_;             // Camera info received flag
+    std::string camera_frame_;                     // Camera frame ID
+    bool        use_distortion_from_camera_info_;  // Use distortion coefficients from camera_info.d
 
     // ========================================================================
     // Parameters

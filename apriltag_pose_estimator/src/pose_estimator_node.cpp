@@ -32,6 +32,8 @@ PoseEstimatorNode::PoseEstimatorNode()
     this->declare_parameter("camera_topic", "realsense_node/color/image_raw");
     this->declare_parameter("camera_info_topic", "realsense_node/color/camera_info");
     this->declare_parameter("camera_frame", "camera_color_optical_frame");
+    // * Distortion handling parameter
+    this->declare_parameter("use_distortion_from_camera_info", false);
     // * Output topics
     this->declare_parameter("tag_detection_topic", "pose_estimator_node/tag_detections");
     // * Service server
@@ -59,6 +61,10 @@ PoseEstimatorNode::PoseEstimatorNode()
 
     // * Service server
     target_point_pose_service_ = this->get_parameter("target_point_pose_service").as_string();
+
+    // * Distortion handling
+    use_distortion_from_camera_info_ =
+        this->get_parameter("use_distortion_from_camera_info").as_bool();
 
     // ---------- OpenCV GUI Thread ----------
     cv::startWindowThread();
@@ -167,10 +173,18 @@ void PoseEstimatorNode::cameraInfoCallback(const sensor_msgs::msg::CameraInfo::S
         marker_ids_int.push_back(static_cast<int>(id));
     }
 
-    // RealSense D415 is using INVERSE_BROWN_CONRADY model,
-    // which is not compatible with OpenCV's forward Brown-Conrady model
-    // So, we use zeros for the distortion coefficients
-    cv::Mat zeros_dist = cv::Mat::zeros(5, 1, CV_64F);
+    // Distortion coefficients for PnP.
+    //   - false (default): zeros — 입력 이미지가 이미 rectified 인 경우.
+    //                      RealSense D4xx color stream 은 하드웨어에서 undistort 된 상태로
+    //                      전송되며 camera_info.d 도 factory 에서 [0,...,0] 으로 들어옴.
+    //   - true           : camera_info.d 를 그대로 사용. Orbbec Femto Bolt 등 raw 이미지
+    //                      (color/image_raw) 를 구독할 때 필요.
+    cv::Mat dist_for_pnp;
+    if (use_distortion_from_camera_info_) {
+        dist_for_pnp = dist_coeffs_;
+    } else {
+        dist_for_pnp = cv::Mat::zeros(5, 1, CV_64F);
+    }
 
     // Create estimator now that we have camera info
     estimator_ = std::make_unique<MultiTagPoseEstimator>(
@@ -179,8 +193,7 @@ void PoseEstimatorNode::cameraInfoCallback(const sensor_msgs::msg::CameraInfo::S
         target_points_,
         tag_size_,
         camera_matrix_,
-        // dist_coeffs_,
-        zeros_dist,
+        dist_for_pnp,
         static_cast<int>(base_marker_id_));
 
     camera_info_received_ = true;

@@ -15,16 +15,25 @@ pose_estimator_node:
     # 2 points x 3 coordinates = 6 values
     # =========================================================
     target_points: [
-         0.000, 0.000, 0.000,  0.000, 0.000, 0.0000,    # Point 0 (x y z r p y)
-         0.000, 0.000, 0.000,  0.000, 0.000, 1.5708,    # Point 1 (x y z r p y)
+         0.000, 0.000, 0.000,  0.000, 0.000, 0.0000,  # Point 0 (x y z r p y)
+         0.000, 0.000, 0.000,  0.000, 0.000, 1.5708,  # Point 1 (x y z r p y)
     ]
     
     # =========================================================
     # Input Topics (Subscribe)
     # =========================================================
-    camera_topic: 'camera/camera/color/image_raw'        # Camera image input
-    camera_info_topic: 'camera/camera/color/camera_info' # Camera info input
+    camera_topic: 'camera/camera/color/image_raw'         # Camera image input
+    camera_info_topic: 'camera/camera/color/camera_info'  # Camera info input
     camera_frame: 'camera_color_optical_frame'            # RealSense optical frame
+
+    # =========================================================
+    # Distortion Handling
+    #   false: Use rectified images (no distortion)
+    #          - default for RealSense D4xx color)
+    #   true : Use raw images and apply PnP with distortion from camera_info
+    #          - needed for cameras like Orbbec Femto Bolt
+    # =========================================================
+    use_distortion_from_camera_info: false
     
     # =========================================================
     # Output Topics (Publish)
