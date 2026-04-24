@@ -136,6 +136,8 @@ AprilTag_Pose_ROS2/
 │   │   └── pose_estimator.yaml             # 설정 파일
 │   ├── launch/
 │   │   └── apriltag_estimator.launch.py    # 런치 파일
+│   ├── scripts/
+│   │   └── jitter_probe.py                 # 서비스 응답 지터 측정 스크립트
 │   ├── CMakeLists.txt
 │   └── package.xml
 ├── apriltag_pose_estimator_msgs/           # 커스텀 인터페이스
@@ -485,6 +487,65 @@ rviz2
 # Fixed Frame: camera_color_optical_frame
 ```
 
+#### 6. 서비스 응답 지터 측정 (선택)
+
+`scripts/jitter_probe.py`는 `target_point_pose` 서비스를 N회 반복 호출하여 응답 포즈의 흔들림(지터)을 위치 (mm) / 회전 (deg) 통계로 보여주는 진단 스크립트입니다. 노드가 실행 중일 때 별도 터미널에서 실행하세요. 빌드 불필요(순수 Python).
+
+**기본 실행**
+
+```bash
+# 100회 호출, 0.1초 간격, target point 0번 추적
+python3 ros2_ws/src/apriltag_pose_estimator/scripts/jitter_probe.py
+```
+
+실행 시작 시 자동으로 timestamp 기반 로그/CSV 파일을 생성하고 경로를 출력합니다 (예: `jitter_probe_20260424_175126.log` / `.csv`). CSV에는 매 호출의 raw 값(`idx, ok, x_mm, y_mm, z_mm, roll_deg, pitch_deg, yaw_deg, message`)이 기록되어 외부 분석/그래프 도구로 활용할 수 있습니다.
+
+**옵션**
+
+| 옵션             | 기본값                                   | 설명                                          |
+| ---------------- | ---------------------------------------- | --------------------------------------------- |
+| `-n, --count`    | 100                                      | 서비스 호출 횟수                              |
+| `-i, --interval` | 0.1                                      | 호출 간격 (초)                                |
+| `--service`      | `/pose_estimator_node/target_point_pose` | 서비스 이름                                   |
+| `--point-index`  | 0                                        | 응답 PoseArray에서 추적할 target point 인덱스 |
+| `--log <path>`   | 자동 timestamp                           | 로그 파일 경로 (원할 경우 직접 지정 가능)     |
+| `--csv <path>`   | 로그와 동일 위치 `.csv`                  | CSV 파일 경로 (원할 경우 직접 지정 가능)      |
+| `--no-log`       | off                                      | 파일 저장을 끄고 콘솔만 사용                  |
+
+**사용 예시**
+
+```bash
+# 200회 호출, 50ms 간격
+python3 .../jitter_probe.py -n 200 -i 0.05
+
+# 두 번째 target point (config의 Point 1) 추적
+python3 .../jitter_probe.py --point-index 1
+
+# 로그/CSV 저장 경로 직접 지정
+python3 .../jitter_probe.py --log /tmp/run1.log --csv /tmp/run1.csv
+
+# 파일 저장 끄고 콘솔 출력만
+python3 .../jitter_probe.py --no-log
+```
+
+**출력 예시**
+
+```
+position (mm):
+  x      mean=  -14.5532 mm  std=  0.2340  min=  -14.9100  max=  -14.1200  p2p=  0.7900
+  y      mean=  -47.2991 mm  std=  ...
+  z      mean= +270.3540 mm  std=  ...
+
+orientation (deg):
+  roll   mean=  ...
+  pitch  mean=  ...
+  yaw    mean=  ...
+```
+
+- `mean`: 평균 (정적 위치 / 반복 가능성 검증)
+- `std`: 1-σ 표준편차 (낮을수록 안정)
+- `p2p`: peak-to-peak (max−min, 실제 떨림 폭)
+
 ---
 
 ## 설정
@@ -515,7 +576,17 @@ pose_estimator_node:
     base_marker_id: 1                   # 기준 마커 ID (-1: 첫 번째 마커)
     tag_size: 0.02778                   # 태그 크기 (m)
     tag_family: 'tagStandard41h12'      # 태그 패밀리 (tag36h11 | tagStandard41h12)
-    marker_offsets: [0.065, 0.0]        # 마커 간 [X, Y] 간격 (m)
+
+    # 마커별 6-DoF 오프셋 (base_marker 프레임 기준)
+    # Flat list: 마커마다 6개 값, marker_ids 순서대로
+    #   [x, y, z, roll, pitch, yaw]   (m, rad)
+    # base_marker_id에 해당하는 항목은 모두 0이어야 함 (아니면 WARN 후 강제 0).
+    # 회전 합성 순서: R = Rz(yaw) * Ry(pitch) * Rx(roll)  (intrinsic Z-Y-X)
+    marker_offsets: [
+      -0.065,  0.000,  0.000,   0.0000,  0.0000,  0.0000,   # marker 0
+       0.000,  0.000,  0.000,   0.0000,  0.0000,  0.0000,   # marker 1 (base)
+       0.065,  0.000,  0.000,   0.0000,  0.0000,  0.0000,   # marker 2
+    ]
 
     # 타겟 포인트 (x, y, z, roll, pitch, yaw) x N
     target_points: [
@@ -547,7 +618,7 @@ pose_estimator_node:
 ### 주요 파라미터 설명
 
 - **tag_size**: AprilTag 검은색 사각형의 한 변 길이(m). 정확도에 직접적으로 영향
-- **marker_offsets**: 마커 중심 간 실제 물리적 거리 `[X, Y]` (m)
+- **marker_offsets**: 마커별 base_marker 기준 6-DoF 변환 (T_base ← marker_i). `marker_ids` 순서대로 마커마다 6개 값 `[x, y, z, roll, pitch, yaw]`(m, rad)을 평면 리스트로 나열. `base_marker_id`에 해당하는 항목은 정의상 identity (모두 0)여야 하며, 0이 아니면 WARN 후 강제 0 처리됨. 마커 수가 `N`이면 총 `6N`개. 회전 합성은 `R = Rz(yaw) * Ry(pitch) * Rx(roll)` (intrinsic Z-Y-X)
 - **target_points**: 베이스 마커 기준 타겟 포인트의 상대 위치 및 회전 (라디안)
 - **use_distortion_from_camera_info**: PnP 시 사용할 왜곡 계수 소스 선택
   - `false` (기본): 왜곡 계수를 0 으로 간주. 이미 rectified 된 이미지(RealSense D4xx color 등)에 사용
@@ -685,10 +756,13 @@ sudo usermod -aG plugdev $USER
 
 ```bash
 # 1. tag_size 값이 실측치와 정확히 일치하는지 확인 (mm -> m 변환 주의)
-# 2. marker_offsets 값이 마커 간 실제 거리와 일치하는지 확인
+# 2. marker_offsets 값이 마커 간 실제 거리/회전과 일치하는지 확인 (마커별 6-DoF)
 # 3. 해상도를 높이거나 프레임 레이트를 낮춰서 이미지 품질 개선
 ros2 launch realsense2_camera rs_launch.py \
   rgb_camera.color_profile:=1280x720x15
+
+# 4. scripts/jitter_probe.py 로 정량 측정 (사용법 섹션 6번 참고)
+python3 ros2_ws/src/apriltag_pose_estimator/scripts/jitter_probe.py
 ```
 
 ### 4. "Could not find libapriltag-dev"
