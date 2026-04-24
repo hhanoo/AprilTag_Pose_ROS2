@@ -1,7 +1,9 @@
 #include "apriltag_pose_estimator/multi_tag_pose_estimator.hpp"
 
 #include <algorithm>
+#include <array>
 #include <iostream>
+#include <stdexcept>
 
 namespace apriltag_pose_estimator {
 
@@ -10,7 +12,7 @@ namespace apriltag_pose_estimator {
 // ========================================================================
 MultiTagPoseEstimator::MultiTagPoseEstimator(
     const std::vector<int>&         marker_ids,
-    const std::vector<float>&       marker_offsets,
+    const std::vector<float>&       marker_offsets_6n,
     const std::vector<TargetPoint>& target_points,
     float                           tag_size,
     const cv::Mat&                  camera_matrix,
@@ -22,15 +24,58 @@ MultiTagPoseEstimator::MultiTagPoseEstimator(
       tag_size_(tag_size),
       camera_matrix_(camera_matrix.clone()),
       dist_coeffs_(dist_coeffs.clone()) {
-    // Initialize marker offsets
-    marker_offset_x_ = marker_offsets[0];
-    marker_offset_y_ = marker_offsets[1];
-
     // Set base marker ID
     if (base_marker_id == -1) {
         base_marker_id_ = marker_ids[0];
     } else {
         base_marker_id_ = base_marker_id;
+    }
+
+    // Find base marker index
+    base_index_ = -1;
+    for (size_t i = 0; i < marker_ids_.size(); i++) {
+        if (marker_ids_[i] == base_marker_id_) {
+            base_index_ = static_cast<int>(i);
+            break;
+        }
+    }
+    if (base_index_ < 0) {
+        throw std::invalid_argument(
+            "MultiTagPoseEstimator: base_marker_id not found in marker_ids");
+    }
+
+    // Validate flat list length: 6 values per marker
+    const size_t N = marker_ids_.size();
+    if (marker_offsets_6n.size() != N * 6) {
+        throw std::invalid_argument(
+            "MultiTagPoseEstimator: marker_offsets must have size 6 * marker_ids.size()");
+    }
+
+    // Compile per-marker T_base <- marker_i (rotation order: Rz * Ry * Rx)
+    marker_T_base_to_marker_.clear();
+    marker_T_base_to_marker_.reserve(N);
+    for (size_t i = 0; i < N; i++) {
+        float x  = marker_offsets_6n[i * 6 + 0];
+        float y  = marker_offsets_6n[i * 6 + 1];
+        float z  = marker_offsets_6n[i * 6 + 2];
+        float r  = marker_offsets_6n[i * 6 + 3];
+        float p  = marker_offsets_6n[i * 6 + 4];
+        float yw = marker_offsets_6n[i * 6 + 5];
+
+        // base_marker entry is identity by definition.
+        if (static_cast<int>(i) == base_index_) {
+            x = y = z = r = p = yw = 0.0f;
+        }
+
+        Eigen::AngleAxisf Rx(r, Eigen::Vector3f::UnitX());
+        Eigen::AngleAxisf Ry(p, Eigen::Vector3f::UnitY());
+        Eigen::AngleAxisf Rz(yw, Eigen::Vector3f::UnitZ());
+        Eigen::Matrix3f   R = Rz.matrix() * Ry.matrix() * Rx.matrix();
+
+        Eigen::Matrix4f T   = Eigen::Matrix4f::Identity();
+        T.block<3, 3>(0, 0) = R;
+        T.block<3, 1>(0, 3) = Eigen::Vector3f(x, y, z);
+        marker_T_base_to_marker_.push_back(T);
     }
 }
 
@@ -63,30 +108,28 @@ bool MultiTagPoseEstimator::estimate(
     pt3D.reserve(num_markers * 4);  // Pre-allocate memory (4 corners per marker)
     pt2D.reserve(num_markers * 4);
 
-    float a  = tag_size_ / 2.0f;  // Half tag size
-    float ox = marker_offset_x_;
-    float oy = marker_offset_y_;
+    float a = tag_size_ / 2.0f;  // Half tag size
 
-    // Find base marker index
-    int base_index = 0;
+    // Local marker corners (each marker's own frame, z = 0).
+    const std::array<Eigen::Vector4f, 4> local_corners = {
+        Eigen::Vector4f(-a, +a, 0.0f, 1.0f),  // top-left
+        Eigen::Vector4f(+a, +a, 0.0f, 1.0f),  // top-right
+        Eigen::Vector4f(+a, -a, 0.0f, 1.0f),  // bottom-right
+        Eigen::Vector4f(-a, -a, 0.0f, 1.0f),  // bottom-left
+    };
+
+    // 4. Fill in pt3D and pt2D by following marker ID order.
+    //    pt3D is expressed in the base_marker frame so that solvePnP yields
+    //    the camera-to-base_marker transform directly.
     for (size_t i = 0; i < marker_ids_.size(); i++) {
-        if (marker_ids_[i] == base_marker_id_) {
-            base_index = i;
-            break;
+        const int              marker_id = marker_ids_[i];
+        const Eigen::Matrix4f& T         = marker_T_base_to_marker_[i];
+
+        // 4.1 Transform each local corner into base_marker frame
+        for (const auto& c : local_corners) {
+            Eigen::Vector4f p_base = T * c;
+            pt3D.emplace_back(p_base.x(), p_base.y(), p_base.z());
         }
-    }
-
-    // 4. Fill in pt3D and pt2D by following marker ID order
-    for (size_t i = 0; i < marker_ids_.size(); i++) {
-        int   marker_id = marker_ids_[i];
-        float dx        = ox * (static_cast<int>(i) - base_index);
-        float dy        = oy * (static_cast<int>(i) - base_index);
-
-        // 4.1 Define world coordinates for the four corners of each marker
-        pt3D.push_back(cv::Point3f(-a + dx, a + dy, 0.0f));   // top-left
-        pt3D.push_back(cv::Point3f(a + dx, a + dy, 0.0f));    // top-right
-        pt3D.push_back(cv::Point3f(a + dx, -a + dy, 0.0f));   // bottom-right
-        pt3D.push_back(cv::Point3f(-a + dx, -a + dy, 0.0f));  // bottom-left
 
         // 4.2 Use the tag's detected corners (2D image points)
         const auto& corners = tag_dict[marker_id].corners;

@@ -92,7 +92,7 @@ class PoseEstimatorNode : public rclcpp::Node {
     int64_t                  base_marker_id_;              // Base marker ID
     double                   tag_size_;                    // Tag size in meters
     std::string              tag_family_;                  // AprilTag family
-    std::vector<double>      marker_offsets_;              // [X, Y] offset between markers
+    std::vector<double>      marker_offsets_;              // 6N flat: [x,y,z,r,p,yaw] per marker, T_base <- marker_i (m, rad)
     std::vector<double>      target_points_flat_;          // Target points (Nx6 flat list)
     std::vector<TargetPoint> target_points_;               // Target points
     bool                     show_service_result_window_;  // Show result window on service call

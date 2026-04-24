@@ -7,7 +7,21 @@ pose_estimator_node:
     base_marker_id: 1                   # Base marker ID (-1: use first marker_id)
     tag_size: 0.02778                   # Tag size in meters (27.78mm)
     tag_family: 'tagStandard41h12'      # AprilTag family
-    marker_offsets: [0.065, 0.0]        # [X, Y] offset between markers (m)
+
+    # =========================================================
+    # Marker Offsets (per-marker 6-DoF, base_marker frame)
+    # Flat list: 6 values per marker, ordered as marker_ids
+    #   [x, y, z, roll, pitch, yaw]   (meters, radians)
+    # The entry corresponding to base_marker_id MUST be all zeros
+    # (will be forced to 0 with WARN otherwise).
+    # Rotation composition: R = Rz(yaw) * Ry(pitch) * Rx(roll)
+    #   (intrinsic Z-Y-X, identical to target_points)
+    # =========================================================
+    marker_offsets: [
+      -0.065,  0.000,  0.000,   0.0000,  0.0000,  0.0000,   # marker 0
+       0.000,  0.000,  0.000,   0.0000,  0.0000,  0.0000,   # marker 1 (base)
+      +0.065,  0.000,  0.000,   0.0000,  0.0000,  0.0000,   # marker 2
+    ]
     
     # =========================================================
     # Target Point Offsets

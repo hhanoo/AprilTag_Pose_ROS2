@@ -1,6 +1,7 @@
 #include "apriltag_pose_estimator/pose_estimator_node.hpp"
 
 #include <Eigen/Geometry>
+#include <cmath>
 #include <cstdlib>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
@@ -20,7 +21,11 @@ PoseEstimatorNode::PoseEstimatorNode()
     this->declare_parameter("base_marker_id", -1);
     this->declare_parameter("tag_size", 0.02778);
     this->declare_parameter("tag_family", "tagStandard41h12");
-    this->declare_parameter("marker_offsets", std::vector<double>{0.065, 0.0});
+    this->declare_parameter("marker_offsets", std::vector<double>{
+                                                  -0.065, 0.0, 0.0, 0.0, 0.0, 0.0,  // marker 0
+                                                  +0.000, 0.0, 0.0, 0.0, 0.0, 0.0,  // marker 1 (base)
+                                                  +0.065, 0.0, 0.0, 0.0, 0.0, 0.0,  // marker 2
+                                              });
     this->declare_parameter("target_points", std::vector<double>{
                                                  0.000, 0.000, 0.000, 0.000, 0.000, 0.000,  // Point 1 (x y z r p y)
                                                  0.000, 0.000, 0.000, 0.000, 0.000, 0.000   // Point 2 (x y z r p y)
@@ -132,6 +137,16 @@ PoseEstimatorNode::PoseEstimatorNode()
                     .c_str());
     RCLCPP_INFO(this->get_logger(), "  Tag family: %s", tag_family_.c_str());
     RCLCPP_INFO(this->get_logger(), "  Tag size: %.5f m", tag_size_);
+    if (marker_offsets_.size() == marker_ids_int.size() * 6) {
+        RCLCPP_INFO(this->get_logger(), "  Marker offsets (T_base <- marker_i):");
+        for (size_t i = 0; i < marker_ids_int.size(); i++) {
+            RCLCPP_INFO(this->get_logger(),
+                        "    id=%d : t=(%.4f, %.4f, %.4f) m  rpy=(%.4f, %.4f, %.4f) rad",
+                        marker_ids_int[i],
+                        marker_offsets_[i * 6 + 0], marker_offsets_[i * 6 + 1], marker_offsets_[i * 6 + 2],
+                        marker_offsets_[i * 6 + 3], marker_offsets_[i * 6 + 4], marker_offsets_[i * 6 + 5]);
+        }
+    }
     RCLCPP_INFO(this->get_logger(), "  Target points: %zu", target_points_.size());
     RCLCPP_INFO(this->get_logger(), "  Target point pose service: %s", target_point_pose_service_.c_str());
     RCLCPP_INFO(this->get_logger(), "  Show service result window: %s",
@@ -161,16 +176,54 @@ void PoseEstimatorNode::cameraInfoCallback(const sensor_msgs::msg::CameraInfo::S
         }
     }
 
-    // Convert marker offsets
-    std::vector<float> marker_offsets_float;
-    for (auto offset : marker_offsets_) {
-        marker_offsets_float.push_back(static_cast<float>(offset));
-    }
-
     // Convert marker_ids to int vector
     std::vector<int> marker_ids_int;
     for (auto id : marker_ids_) {
         marker_ids_int.push_back(static_cast<int>(id));
+    }
+
+    // ---------- Validate marker_offsets (6N flat) ----------
+    const size_t N = marker_ids_.size();
+    if (marker_offsets_.size() != N * 6) {
+        RCLCPP_FATAL(this->get_logger(),
+                     "marker_offsets size mismatch: expected %zu (= 6 * %zu), got %zu. "
+                     "Each marker requires [x, y, z, roll, pitch, yaw].",
+                     N * 6, N, marker_offsets_.size());
+        rclcpp::shutdown();
+        return;
+    }
+
+    // Locate base marker index in marker_ids
+    int base_index = -1;
+    for (size_t i = 0; i < N; i++) {
+        if (static_cast<int>(marker_ids_[i]) == static_cast<int>(base_marker_id_)) {
+            base_index = static_cast<int>(i);
+            break;
+        }
+    }
+    if (base_index < 0) {
+        RCLCPP_FATAL(this->get_logger(),
+                     "base_marker_id=%ld not found in marker_ids", base_marker_id_);
+        rclcpp::shutdown();
+        return;
+    }
+
+    // base_marker entry must be identity (0,0,0, 0,0,0). Force to 0 with WARN.
+    for (int k = 0; k < 6; k++) {
+        double v = marker_offsets_[base_index * 6 + k];
+        if (std::abs(v) > 1e-9) {
+            RCLCPP_WARN(this->get_logger(),
+                        "base_marker_id=%ld marker_offsets[%d]=%.6f is non-zero; forcing to 0",
+                        base_marker_id_, base_index * 6 + k, v);
+            marker_offsets_[base_index * 6 + k] = 0.0;
+        }
+    }
+
+    // Convert marker_offsets to float vector
+    std::vector<float> marker_offsets_float;
+    marker_offsets_float.reserve(marker_offsets_.size());
+    for (auto offset : marker_offsets_) {
+        marker_offsets_float.push_back(static_cast<float>(offset));
     }
 
     // Distortion coefficients for PnP.
