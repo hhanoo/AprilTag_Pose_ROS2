@@ -12,9 +12,33 @@ from pathlib import Path
 
 import rclpy
 from builtin_interfaces.msg import Time as TimeMsg
+from rcl_interfaces.msg import ParameterType
+from rcl_interfaces.srv import GetParameters
 from rclpy.node import Node
 
 from apriltag_pose_estimator_msgs.srv import TargetPointPose
+
+
+def _pv_to_py(pv):
+    """ParameterValue -> Python native value."""
+    t = pv.type
+    if t == ParameterType.PARAMETER_BOOL:
+        return pv.bool_value
+    if t == ParameterType.PARAMETER_INTEGER:
+        return pv.integer_value
+    if t == ParameterType.PARAMETER_DOUBLE:
+        return pv.double_value
+    if t == ParameterType.PARAMETER_STRING:
+        return pv.string_value
+    if t == ParameterType.PARAMETER_BOOL_ARRAY:
+        return list(pv.bool_array_value)
+    if t == ParameterType.PARAMETER_INTEGER_ARRAY:
+        return list(pv.integer_array_value)
+    if t == ParameterType.PARAMETER_DOUBLE_ARRAY:
+        return list(pv.double_array_value)
+    if t == ParameterType.PARAMETER_STRING_ARRAY:
+        return list(pv.string_array_value)
+    return None
 
 
 class _Tee:
@@ -69,6 +93,51 @@ class JitterProbe(Node):
         rclpy.spin_until_future_complete(self, future, timeout_sec=2.0)
         return future.result()
 
+    def fetch_params(self, target_node: str, names: list, timeout_sec: float = 3.0):
+        """Query target_node for parameter values via standard ROS2 param service."""
+        cli = self.create_client(GetParameters, f"/{target_node}/get_parameters")
+        if not cli.wait_for_service(timeout_sec=timeout_sec):
+            return None
+        req = GetParameters.Request()
+        req.names = names
+        future = cli.call_async(req)
+        rclpy.spin_until_future_complete(self, future, timeout_sec=timeout_sec)
+        res = future.result()
+        if res is None:
+            return None
+        return {name: _pv_to_py(pv) for name, pv in zip(names, res.values)}
+
+
+def _node_from_service(service_name: str) -> str:
+    """Extract node name from a fully-qualified service name (first path segment)."""
+    parts = service_name.strip("/").split("/")
+    return parts[0] if parts else ""
+
+
+def _print_node_config(params: dict) -> None:
+    """Pretty-print the relevant subset of pose_estimator_node parameters."""
+    print()
+    print("node configuration:")
+    print(f"  marker_ids     : {params.get('marker_ids')}")
+    print(f"  base_marker_id : {params.get('base_marker_id')}")
+    print(f"  tag_size       : {params.get('tag_size')} m")
+    print(f"  tag_family     : {params.get('tag_family')}")
+    offsets = params.get("marker_offsets")
+    ids = params.get("marker_ids") or []
+    if offsets is not None and len(ids) > 0 and len(offsets) == len(ids) * 6:
+        print("  marker_offsets (T_base <- marker_i):")
+        for i, mid in enumerate(ids):
+            base = i * 6
+            x, y, z = offsets[base + 0], offsets[base + 1], offsets[base + 2]
+            r, p, yw = offsets[base + 3], offsets[base + 4], offsets[base + 5]
+            print(
+                f"    id={mid:<4d} t=({x:+.4f}, {y:+.4f}, {z:+.4f}) m"
+                f"  rpy=({r:+.4f}, {p:+.4f}, {yw:+.4f}) rad"
+            )
+    else:
+        print(f"  marker_offsets : {offsets}")
+    print()
+
 
 def summarize(values: list, label: str, unit: str) -> str:
     if not values:
@@ -114,7 +183,7 @@ def main() -> None:
     parser.add_argument(
         "--log",
         default=None,
-        help="path to log file (default: /tmp/jitter_probe_<timestamp>.log)",
+        help="path to log file (default: /ros2_ws/jitter_probe_<timestamp>.log)",
     )
     parser.add_argument(
         "--csv",
@@ -126,6 +195,17 @@ def main() -> None:
         action="store_true",
         help="disable log/csv files entirely",
     )
+    parser.add_argument(
+        "--node",
+        default=None,
+        help="node name to query for parameters "
+        "(default: derived from --service path)",
+    )
+    parser.add_argument(
+        "--no-params",
+        action="store_true",
+        help="skip querying node parameters at startup",
+    )
     args = parser.parse_args()
 
     # ---------- Log/CSV setup ----------
@@ -134,7 +214,9 @@ def main() -> None:
     csv_writer = None
     if not args.no_log:
         ts = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-        log_path = Path(args.log) if args.log else Path(f"/tmp/jitter_probe_{ts}.log")
+        log_path = (
+            Path(args.log) if args.log else Path(f"/ros2_ws/jitter_probe_{ts}.log")
+        )
         csv_path = Path(args.csv) if args.csv else log_path.with_suffix(".csv")
         log_path.parent.mkdir(parents=True, exist_ok=True)
         csv_path.parent.mkdir(parents=True, exist_ok=True)
@@ -161,6 +243,25 @@ def main() -> None:
     rclpy.init()
     probe = JitterProbe(args.service)
 
+    # ---------- Query node parameters (best-effort) ----------
+    if not args.no_params:
+        target_node = args.node or _node_from_service(args.service)
+        params = probe.fetch_params(
+            target_node,
+            [
+                "marker_ids",
+                "base_marker_id",
+                "tag_size",
+                "tag_family",
+                "marker_offsets",
+            ],
+        )
+        if params is None:
+            print(f"warning: could not fetch parameters from /{target_node}")
+        else:
+            print(f"queried node : /{target_node}")
+            _print_node_config(params)
+
     xs, ys, zs = [], [], []
     rolls, pitches, yaws = [], [], []
     fail_count = 0
@@ -170,8 +271,15 @@ def main() -> None:
         f"point_index={args.point_index}"
     )
     t0 = time.time()
+    frame_id_printed = False
     for k in range(args.count):
         resp = probe.call_once()
+        if resp is not None and resp.success and not frame_id_printed:
+            print(
+                f"response frame_id: {resp.poses.header.frame_id}  "
+                f"(poses count: {len(resp.poses.poses)})"
+            )
+            frame_id_printed = True
         if resp is None or not resp.success:
             fail_count += 1
             msg = resp.message if resp is not None else "(timeout)"
