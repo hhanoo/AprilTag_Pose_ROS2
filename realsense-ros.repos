@@ -1,5 +1,0 @@
-repositories:
-  realsense-ros:
-    type: git
-    url: https://github.com/realsenseai/realsense-ros.git
-    version: 4.55.1
