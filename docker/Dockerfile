@@ -35,11 +35,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     clangd \
     && rm -rf /var/lib/apt/lists/*
 
-# Intel RealSense SDK -------------------------------------------------------
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ros-humble-realsense2-* \
-    && rm -rf /var/lib/apt/lists/*
-
 # Vision Dependencies -------------------------------------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libeigen3-dev \
@@ -71,7 +66,6 @@ RUN python3 -m pip install --no-cache-dir \
     'numpy>=1.21.0,<2.0' \
     dt-apriltags==3.1.7 \
     opencv-python==4.10.0.84 \
-    pyrealsense2==2.56.5.9235 \
     PyQt5 \
     PyQt5-sip
 

@@ -36,16 +36,14 @@ pose_estimator_node:
     # =========================================================
     # Input Topics (Subscribe)
     # =========================================================
-    camera_topic: 'camera/camera/color/image_raw'         # Camera image input
-    camera_info_topic: 'camera/camera/color/camera_info'  # Camera info input
-    camera_frame: 'camera_color_optical_frame'            # RealSense optical frame
+    camera_topic: 'camera/color/image_raw'         # Camera image input
+    camera_info_topic: 'camera/color/camera_info'  # Camera info input
+    camera_frame: 'camera_color_optical_frame'     # Camera optical frame
 
     # =========================================================
     # Distortion Handling
     #   false: Use rectified images (no distortion)
-    #          - default for RealSense D4xx color)
     #   true : Use raw images and apply PnP with distortion from camera_info
-    #          - needed for cameras like Orbbec Femto Bolt
     # =========================================================
     use_distortion_from_camera_info: false
     

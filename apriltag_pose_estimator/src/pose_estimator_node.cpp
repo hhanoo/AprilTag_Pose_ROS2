@@ -34,8 +34,8 @@ PoseEstimatorNode::PoseEstimatorNode()
     this->declare_parameter("display_width", 0);
     this->declare_parameter("display_height", 0);
     // * Input topics
-    this->declare_parameter("camera_topic", "realsense_node/color/image_raw");
-    this->declare_parameter("camera_info_topic", "realsense_node/color/camera_info");
+    this->declare_parameter("camera_topic", "/camera/color/image_raw");
+    this->declare_parameter("camera_info_topic", "/camera/color/camera_info");
     this->declare_parameter("camera_frame", "camera_color_optical_frame");
     // * Distortion handling parameter
     this->declare_parameter("use_distortion_from_camera_info", false);
@@ -228,10 +228,7 @@ void PoseEstimatorNode::cameraInfoCallback(const sensor_msgs::msg::CameraInfo::S
 
     // Distortion coefficients for PnP.
     //   - false (default): zeros — 입력 이미지가 이미 rectified 인 경우.
-    //                      RealSense D4xx color stream 은 하드웨어에서 undistort 된 상태로
-    //                      전송되며 camera_info.d 도 factory 에서 [0,...,0] 으로 들어옴.
-    //   - true           : camera_info.d 를 그대로 사용. Orbbec Femto Bolt 등 raw 이미지
-    //                      (color/image_raw) 를 구독할 때 필요.
+    //   - true           : camera_info.d 를 그대로 사용. raw 이미지를 구독할 때 필요.
     cv::Mat dist_for_pnp;
     if (use_distortion_from_camera_info_) {
         dist_for_pnp = dist_coeffs_;
