@@ -470,15 +470,7 @@ ros2 service call /pose_estimator_node/target_point_pose \
   "{request_time: {sec: 0, nanosec: 0}}"
 ```
 
-#### 5. RViz2 시각화
-
-```bash
-rviz2
-# Add > By topic > /visualization_markers > MarkerArray
-# Fixed Frame: camera_color_optical_frame
-```
-
-#### 6. 서비스 응답 지터 측정 (선택)
+#### 5. 서비스 응답 지터 측정 (선택)
 
 `scripts/jitter_probe.py`는 `target_point_pose` 서비스를 N회 반복 호출하여 응답 포즈의 흔들림(지터)을 위치 (mm) / 회전 (deg) 통계로 보여주는 진단 스크립트입니다. 노드가 실행 중일 때 별도 터미널에서 실행하세요. 빌드 불필요(순수 Python).
 
