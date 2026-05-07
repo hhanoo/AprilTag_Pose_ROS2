@@ -27,14 +27,6 @@ geometry_msgs::msg::Pose nanPose() {
     return p;
 }
 
-// Identity target point (zero translation/rotation) → estimator returns base marker pose
-TargetPoint identityTargetPoint() {
-    TargetPoint tp;
-    tp.position     = Eigen::Vector3f::Zero();
-    tp.rotation_rpy = Eigen::Vector3f::Zero();
-    return tp;
-}
-
 }  // namespace
 
 // ========================================================================
@@ -127,10 +119,10 @@ PoseEstimatorNode::PoseEstimatorNode()
     // ---------- Initial state ----------
     dist_coeffs_ = cv::Mat::zeros(5, 1, CV_64F);
     for (const auto& name : group_names_) {
-        latest_valid_per_group_[name]      = false;
-        latest_rvec_per_group_[name]       = cv::Mat::zeros(3, 1, CV_64F);
-        latest_tvec_per_group_[name]       = cv::Mat::zeros(3, 1, CV_64F);
-        latest_transforms_per_group_[name] = {};
+        latest_valid_per_group_[name]          = false;
+        latest_rvec_per_group_[name]           = cv::Mat::zeros(3, 1, CV_64F);
+        latest_tvec_per_group_[name]           = cv::Mat::zeros(3, 1, CV_64F);
+        latest_base_transform_per_group_[name] = Eigen::Matrix4f::Identity();
     }
 
     // ---------- Latched group_names publish ----------
@@ -294,13 +286,9 @@ void PoseEstimatorNode::cameraInfoCallback(const sensor_msgs::msg::CameraInfo::S
             marker_offsets_float.push_back(static_cast<float>(v));
         }
 
-        // Inject a single identity target so estimator output equals the base marker pose
-        std::vector<TargetPoint> identity_targets = {identityTargetPoint()};
-
         estimators_[name] = std::make_unique<MultiTagPoseEstimator>(
             marker_ids_int,
             marker_offsets_float,
-            identity_targets,
             tag_size_,
             camera_matrix_,
             dist_for_pnp,
@@ -377,7 +365,7 @@ void PoseEstimatorNode::imageCallback(const sensor_msgs::msg::Image::SharedPtr m
             auto&       last_v  = latest_valid_per_group_[name];
             auto&       last_r  = latest_rvec_per_group_[name];
             auto&       last_t  = latest_tvec_per_group_[name];
-            auto&       last_xf = latest_transforms_per_group_[name];
+            auto&       last_xf = latest_base_transform_per_group_[name];
 
             // Filter detected tags by this group's marker_ids
             std::vector<TagDetection> group_tags;
@@ -391,27 +379,23 @@ void PoseEstimatorNode::imageCallback(const sensor_msgs::msg::Image::SharedPtr m
                 }
             }
 
-            // Estimate for this group
-            std::vector<Eigen::Matrix4f> transforms;
-            cv::Mat                      rvec = cv::Mat::zeros(3, 1, CV_64F);
-            cv::Mat                      tvec = cv::Mat::zeros(3, 1, CV_64F);
-            const bool                   ok   = !group_tags.empty()
-                                                    ? est->estimate(group_tags, vis_image, rvec, tvec, transforms)
-                                                    : false;
+            // Estimate for this group (single base marker pose output)
+            Eigen::Matrix4f base_xf = Eigen::Matrix4f::Identity();
+            cv::Mat         rvec    = cv::Mat::zeros(3, 1, CV_64F);
+            cv::Mat         tvec    = cv::Mat::zeros(3, 1, CV_64F);
+            const bool      ok      = !group_tags.empty()
+                                          ? est->estimate(group_tags, vis_image, rvec, tvec, base_xf)
+                                          : false;
 
             if (ok) {
                 last_v  = true;
                 last_r  = rvec;
                 last_t  = tvec;
-                last_xf = transforms;
-                for (const auto& xf : transforms) {
-                    pose_array_msg.poses.push_back(matrixToPose(xf));
-                }
+                last_xf = base_xf;
+                pose_array_msg.poses.push_back(matrixToPose(base_xf));
                 status_msg.data.push_back(1);
             } else {
                 last_v = false;
-                last_xf.clear();
-                // Fill single NaN pose (one per group → base marker pose)
                 pose_array_msg.poses.push_back(nanPose());
                 status_msg.data.push_back(0);
             }
@@ -526,8 +510,7 @@ void PoseEstimatorNode::targetPointPoseServiceCallback(
         }
     }
 
-    const auto& transforms = latest_transforms_per_group_[group];
-    if (!latest_valid_per_group_[group] || transforms.empty()) {
+    if (!latest_valid_per_group_[group]) {
         response->success = false;
         response->message = "No recent valid target poses for group '" + group + "'";
         RCLCPP_WARN(this->get_logger(),
@@ -542,17 +525,15 @@ void PoseEstimatorNode::targetPointPoseServiceCallback(
         return;
     }
 
+    const Eigen::Matrix4f& base_xf  = latest_base_transform_per_group_[group];
     response->data_time             = latest_timestamp_;
     response->poses.header.stamp    = latest_timestamp_;
     response->poses.header.frame_id = camera_frame_;
-    for (const auto& xf : transforms) {
-        response->poses.poses.push_back(matrixToPose(xf));
-    }
+    response->poses.poses.push_back(matrixToPose(base_xf));
     response->success = true;
     response->message = "Target point pose retrieved successfully (group='" + group + "')";
 
-    RCLCPP_INFO(this->get_logger(), "Service: returned %zu poses for group '%s'",
-                transforms.size(), group.c_str());
+    RCLCPP_INFO(this->get_logger(), "Service: returned base pose for group '%s'", group.c_str());
 }
 
 // ========================================================================

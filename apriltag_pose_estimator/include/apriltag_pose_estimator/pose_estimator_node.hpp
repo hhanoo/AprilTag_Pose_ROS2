@@ -136,13 +136,13 @@ class PoseEstimatorNode : public rclcpp::Node {
     // ========================================================================
     // Latest Detection Results (Per Group, for service)
     // ========================================================================
-    std::mutex                                          detection_mutex_;
-    std::map<std::string, bool>                         latest_valid_per_group_;  // Last estimate success per group
-    std::map<std::string, cv::Mat>                      latest_rvec_per_group_;
-    std::map<std::string, cv::Mat>                      latest_tvec_per_group_;
-    std::map<std::string, std::vector<Eigen::Matrix4f>> latest_transforms_per_group_;
-    cv::Mat                                             latest_vis_image_;  // Single image with all-group overlays
-    rclcpp::Time                                        latest_timestamp_;
+    std::mutex                             detection_mutex_;
+    std::map<std::string, bool>            latest_valid_per_group_;  // Last estimate success per group
+    std::map<std::string, cv::Mat>         latest_rvec_per_group_;
+    std::map<std::string, cv::Mat>         latest_tvec_per_group_;
+    std::map<std::string, Eigen::Matrix4f> latest_base_transform_per_group_;  // T_camera <- base_marker
+    cv::Mat                                latest_vis_image_;                 // Single image with all-group overlays
+    rclcpp::Time                           latest_timestamp_;
 };
 
 }  // namespace apriltag_pose_estimator

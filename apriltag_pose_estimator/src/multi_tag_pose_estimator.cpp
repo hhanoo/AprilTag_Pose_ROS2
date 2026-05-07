@@ -11,16 +11,13 @@ namespace apriltag_pose_estimator {
 // Constructor
 // ========================================================================
 MultiTagPoseEstimator::MultiTagPoseEstimator(
-    const std::vector<int>&         marker_ids,
-    const std::vector<float>&       marker_offsets_6n,
-    const std::vector<TargetPoint>& target_points,
-    float                           tag_size,
-    const cv::Mat&                  camera_matrix,
-    const cv::Mat&                  dist_coeffs,
-    int                             base_marker_id)
+    const std::vector<int>&   marker_ids,
+    const std::vector<float>& marker_offsets_6n,
+    float                     tag_size,
+    const cv::Mat&            camera_matrix,
+    const cv::Mat&            dist_coeffs,
+    int                       base_marker_id)
     : marker_ids_(marker_ids),
-      target_points_(target_points),
-      target_point_count_(target_points.size()),
       tag_size_(tag_size),
       camera_matrix_(camera_matrix.clone()),
       dist_coeffs_(dist_coeffs.clone()) {
@@ -87,7 +84,7 @@ bool MultiTagPoseEstimator::estimate(
     cv::Mat&                         img,
     cv::Mat&                         rvec,
     cv::Mat&                         tvec,
-    std::vector<Eigen::Matrix4f>&    target_point_transforms) {
+    Eigen::Matrix4f&                 base_transform_out) {
     // 1. Make a dictionary for fast lookup: tag_id → tag
     std::map<int, TagDetection> tag_dict;
     for (const auto& tag : tags) {
@@ -191,63 +188,10 @@ bool MultiTagPoseEstimator::estimate(
         tvec.at<double>(2) = T_cam_2_marker_filtered(2, 3);
     }
 
-    // 8. Compute target point poses from filtered base marker transform
-    target_point_transforms.clear();
-    target_point_transforms.reserve(target_points_.size());
+    // 8. Output: filtered base marker pose (camera frame)
+    base_transform_out = T_cam_2_marker_filtered;
 
-    for (size_t i = 0; i < target_points_.size(); i++) {
-        // 8.0 Target point pose in marker frame
-        Eigen::Vector3f t_offset(
-            target_points_[i].position(0),
-            target_points_[i].position(1),
-            target_points_[i].position(2));
-        Eigen::AngleAxisf roll(
-            target_points_[i].rotation_rpy(0),
-            Eigen::Vector3f::UnitX());
-        Eigen::AngleAxisf pitch(
-            target_points_[i].rotation_rpy(1),
-            Eigen::Vector3f::UnitY());
-        Eigen::AngleAxisf yaw(
-            target_points_[i].rotation_rpy(2),
-            Eigen::Vector3f::UnitZ());
-
-        Eigen::Matrix3f R_offset = yaw.matrix() * pitch.matrix() * roll.matrix();
-
-        Eigen::Matrix4f T_marker_2_target_point   = Eigen::Matrix4f::Identity();
-        T_marker_2_target_point.block<3, 3>(0, 0) = R_offset;
-        T_marker_2_target_point.block<3, 1>(0, 3) = t_offset;
-
-        // 8.1 Target point pose in camera frame (filtered base marker 사용)
-        Eigen::Matrix4f T_camera_2_target_point = T_cam_2_marker_filtered * T_marker_2_target_point;
-
-        // 8.2 Store the transformation matrix for this point
-        target_point_transforms.push_back(T_camera_2_target_point);
-    }
-
-    // 9. Visualize filtered target points on image (필터 적용 후 위치로 시각화)
-    for (size_t i = 0; i < target_point_transforms.size(); i++) {
-        Eigen::Vector3f pos_cam = target_point_transforms[i].block<3, 1>(0, 3);
-
-        Eigen::Vector3f img_point_eigen;
-        img_point_eigen(0) = camera_matrix_.at<double>(0, 0) * pos_cam(0) +
-                             camera_matrix_.at<double>(0, 2) * pos_cam(2);
-        img_point_eigen(1) = camera_matrix_.at<double>(1, 1) * pos_cam(1) +
-                             camera_matrix_.at<double>(1, 2) * pos_cam(2);
-        img_point_eigen(2) = pos_cam(2);
-
-        if (img_point_eigen(2) > 0) {
-            img_point_eigen /= img_point_eigen(2);
-
-            // 9.1 Draw white circle with black border
-            cv::Point img_point(
-                static_cast<int>(img_point_eigen(0)),
-                static_cast<int>(img_point_eigen(1)));
-            cv::circle(img, img_point, 5, cv::Scalar(255, 255, 255), -1);  // Fill white
-            cv::circle(img, img_point, 5, cv::Scalar(0, 0, 0), 2);         // Black border
-        }
-    }
-
-    // 10. Visualize the base marker pose using axes
+    // 9. Visualize the base marker pose using axes
     cv::drawFrameAxes(img, camera_matrix_, dist_coeffs_, rvec, tvec, tag_size_);
 
     return true;
