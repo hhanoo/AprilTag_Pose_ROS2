@@ -491,7 +491,6 @@ python3 ros2_ws/src/apriltag_pose_estimator/scripts/jitter_probe.py
 | `-i, --interval` | 0.1                                      | 호출 간격 (초)                                                  |
 | `--service`      | `/pose_estimator_node/target_point_pose` | 서비스 이름                                                     |
 | `--group`        | `""`                                     | 조회할 그룹 이름 (빈 문자열 = 첫/default 그룹)                  |
-| `--point-index`  | 0                                        | 응답 PoseArray 인덱스. v3.0.0부터 그룹당 pose 1개라 보통 0 고정 |
 | `--log <path>`   | 자동 timestamp                           | 로그 파일 경로 (원할 경우 직접 지정 가능)                       |
 | `--csv <path>`   | 로그와 동일 위치 `.csv`                  | CSV 파일 경로 (원할 경우 직접 지정 가능)                        |
 | `--no-log`       | off                                      | 파일 저장을 끄고 콘솔만 사용                                    |

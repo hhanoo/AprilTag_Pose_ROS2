@@ -184,12 +184,6 @@ def main() -> None:
         help="group name to query (default: '' → first/default group)",
     )
     parser.add_argument(
-        "--point-index",
-        type=int,
-        default=0,
-        help="which target point in the response to track (default: 0)",
-    )
-    parser.add_argument(
         "--log",
         default=None,
         help="path to log file (default: /ros2_ws/jitter_probe_<timestamp>.log)",
@@ -297,7 +291,7 @@ def main() -> None:
 
     print(
         f"calling {args.count} times, interval={args.interval}s, "
-        f"point_index={args.point_index}"
+        f"group='{args.group or '(default)'}'"
     )
     t0 = time.time()
     frame_id_printed = False
@@ -316,27 +310,20 @@ def main() -> None:
             if csv_writer is not None:
                 csv_writer.writerow([k, 0, "", "", "", "", "", "", msg])
         else:
-            poses = resp.poses.poses
-            if args.point_index >= len(poses):
-                fail_count += 1
-                msg = f"point_index out of range (have {len(poses)})"
-                print(f"  [{k:3d}] FAIL: {msg}")
-                if csv_writer is not None:
-                    csv_writer.writerow([k, 0, "", "", "", "", "", "", msg])
-            else:
-                p = poses[args.point_index]
-                x_mm = p.position.x * 1000.0
-                y_mm = p.position.y * 1000.0
-                z_mm = p.position.z * 1000.0
-                r, pi, ya = quat_to_rpy_deg(
-                    p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w
-                )
-                xs.append(x_mm)
-                ys.append(y_mm)
-                zs.append(z_mm)
-                rolls.append(r)
-                pitches.append(pi)
-                yaws.append(ya)
+            # multi-group v3.0.0+: PoseArray always contains exactly one pose (base marker)
+            p = resp.poses.poses[0]
+            x_mm = p.position.x * 1000.0
+            y_mm = p.position.y * 1000.0
+            z_mm = p.position.z * 1000.0
+            r, pi, ya = quat_to_rpy_deg(
+                p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w
+            )
+            xs.append(x_mm)
+            ys.append(y_mm)
+            zs.append(z_mm)
+            rolls.append(r)
+            pitches.append(pi)
+            yaws.append(ya)
                 if csv_writer is not None:
                     csv_writer.writerow(
                         [
