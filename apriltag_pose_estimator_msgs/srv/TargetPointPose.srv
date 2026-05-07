@@ -1,7 +1,8 @@
 # Service to get target points pose from latest detection
 
-# Request 
+# Request
 builtin_interfaces/Time request_time    # Client-side reference time
+string group_name                       # Group to query ("" = first group in group_names)
 ---
 # Response
 bool success                            # Whether poses are available

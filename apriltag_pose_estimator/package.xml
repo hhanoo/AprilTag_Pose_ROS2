@@ -2,7 +2,7 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>apriltag_pose_estimator</name>
-  <version>1.2.0</version>
+  <version>3.0.0</version>
   <description>AprilTag-based multi-target pose estimator (C++)</description>
 
   <maintainer email="woo980711@gmail.com">hhanoo</maintainer>
@@ -25,6 +25,9 @@
   
   <!-- * Image and camera info message types -->
   <depend>sensor_msgs</depend>
+
+  <!-- * std_msgs (String, UInt8MultiArray) -->
+  <depend>std_msgs</depend>
   
   <!-- * OpenCV-ROS2 image conversion bridge -->
   <depend>cv_bridge</depend>

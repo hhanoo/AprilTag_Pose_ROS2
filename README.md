@@ -73,7 +73,8 @@ AprilTag Pose ROS2는 ROS2 호환 RGB 카메라와 AprilTag 마커를 활용하�
 - **SLERP 쿼터니언 필터**: Gimbal lock 없는 회전 보간과 적응형 EMA로 프레임 간 지터 억제
 - **Reprojection Error 기반 이상치 제거**: 15픽셀 임계값으로 불량 검출 자동 필터링
 - **고성능 C++ 파이프라인**: 실시간 처리에 적합한 네이티브 구현 (5-8ms/frame @ 1280x720)
-- **YAML 기반 유연한 설정**: 마커 ID, 크기, 오프셋, 타겟 포인트를 설정 파일로 관리
+- **Multi-Group 동시 추정**: 한 카메라 프레임에서 여러 마커 그룹의 base pose를 동시에 publish (그룹별 독립 SLERP 필터)
+- **YAML 기반 유연한 설정**: 마커 ID, 크기, 그룹별 오프셋을 설정 파일로 관리
 - **실시간 3D 시각화**: 위치(tvec) 및 회전(RPY) 히스토리의 3D 산점도와 통계 오버레이
 - **서비스 인터페이스**: 온디맨드 포즈 쿼리를 위한 ROS2 서비스 제공
 - **Docker 지원**: 빌드 및 실행 스크립트 포함, 원클릭 컨테이너 환경
@@ -98,20 +99,26 @@ AprilTag Pose ROS2는 ROS2 호환 RGB 카메라와 AprilTag 마커를 활용하�
     └───────────┬───────────┘
                 │  sensor_msgs/Image
                 │  sensor_msgs/CameraInfo
-                ▼
-    ┌───────────────────────┐     ┌───────────────────────┐
-    │ apriltag_pose_        │     │ apriltag_pose_        │
-    │ estimator             │────▶│ visualizer            │  (Python)
-    │  - Tag detection      │     │  - Overlay drawing    │
-    │  - Multi-tag PnP      │     │  - RPY calculation    │
-    │  - SLERP filtering    │     │  - 3D scatter plots   │
-    │  - Outlier rejection  │     └───────────────────────┘
+                │
+                ├─────────────────────────────────────┐
+                │                                     │ sensor_msgs/Image
+                ▼                                     ▼
+    ┌───────────────────────┐                ┌───────────────────────┐
+    │ apriltag_pose_        │  TagDetection  │ apriltag_pose_        │
+    │ estimator             │───────────────▶│ visualizer            │  (Python)
+    │  - Tag detection      │                │  - Overlay drawing    │
+    │  - Multi-tag PnP      │                │  - RPY calculation    │
+    │  - SLERP filtering    │                │  - 3D scatter plots   │
+    │  - Outlier rejection  │                └───────────────────────┘
     └───────────┬───────────┘
-                │  /target_poses
-                │  /tag_detections
+                │  /target_poses        (PoseArray, group_names order)
+                │  /group_names         (latched CSV)
+                │  /group_status        (per-group valid bits)
+                │  /detection_image     (BGR8 overlay)
+                │  /tag_detections      (raw, debug — visualizer 입력)
                 ▼
          Service Client
-    (target_point_pose query)
+    (target_point_pose query, group_name dispatch)
 ```
 
 ---
@@ -486,15 +493,16 @@ python3 ros2_ws/src/apriltag_pose_estimator/scripts/jitter_probe.py
 
 **옵션**
 
-| 옵션             | 기본값                                   | 설명                                          |
-| ---------------- | ---------------------------------------- | --------------------------------------------- |
-| `-n, --count`    | 100                                      | 서비스 호출 횟수                              |
-| `-i, --interval` | 0.1                                      | 호출 간격 (초)                                |
-| `--service`      | `/pose_estimator_node/target_point_pose` | 서비스 이름                                   |
-| `--point-index`  | 0                                        | 응답 PoseArray에서 추적할 target point 인덱스 |
-| `--log <path>`   | 자동 timestamp                           | 로그 파일 경로 (원할 경우 직접 지정 가능)     |
-| `--csv <path>`   | 로그와 동일 위치 `.csv`                  | CSV 파일 경로 (원할 경우 직접 지정 가능)      |
-| `--no-log`       | off                                      | 파일 저장을 끄고 콘솔만 사용                  |
+| 옵션             | 기본값                                   | 설명                                                            |
+| ---------------- | ---------------------------------------- | --------------------------------------------------------------- |
+| `-n, --count`    | 100                                      | 서비스 호출 횟수                                                |
+| `-i, --interval` | 0.1                                      | 호출 간격 (초)                                                  |
+| `--service`      | `/pose_estimator_node/target_point_pose` | 서비스 이름                                                     |
+| `--group`        | `""`                                     | 조회할 그룹 이름 (빈 문자열 = 첫/default 그룹)                  |
+| `--point-index`  | 0                                        | 응답 PoseArray 인덱스. v3.0.0부터 그룹당 pose 1개라 보통 0 고정 |
+| `--log <path>`   | 자동 timestamp                           | 로그 파일 경로 (원할 경우 직접 지정 가능)                       |
+| `--csv <path>`   | 로그와 동일 위치 `.csv`                  | CSV 파일 경로 (원할 경우 직접 지정 가능)                        |
+| `--no-log`       | off                                      | 파일 저장을 끄고 콘솔만 사용                                    |
 
 **사용 예시**
 
@@ -502,8 +510,8 @@ python3 ros2_ws/src/apriltag_pose_estimator/scripts/jitter_probe.py
 # 200회 호출, 50ms 간격
 python3 .../jitter_probe.py -n 200 -i 0.05
 
-# 두 번째 target point (config의 Point 1) 추적
-python3 .../jitter_probe.py --point-index 1
+# 특정 그룹 추적 (multi-group yaml 환경)
+python3 .../jitter_probe.py --group secondary
 
 # 로그/CSV 저장 경로 직접 지정
 python3 .../jitter_probe.py --log /tmp/run1.log --csv /tmp/run1.csv
@@ -547,62 +555,71 @@ CONTAINER_NAME="apriltag-pose-ros2-humble"              # Docker 컨테이너 �
 >
 > 직접 빌드하려면 `IMAGE_NAME`을 `"apriltag-pose-ros2-humble"` 등으로 변경 후 `./build.sh`를 실행하세요.
 
-### pose_estimator.yaml
+### pose_estimator.yaml (Multi-Group, 권장)
 
 [apriltag_pose_estimator/config/pose_estimator.yaml](apriltag_pose_estimator/config/pose_estimator.yaml)
+
+신규 사용자는 multi-group 형식을 기본으로 사용합니다. 단일 그룹 운영도 group_names에 그룹 하나만 두면 동일한 인터페이스로 동작합니다.
 
 <!-- prettier-ignore -->
 ```yaml
 pose_estimator_node:
   ros__parameters:
-    # AprilTag 설정
-    marker_ids: [0, 1, 2]               # 검출할 태그 ID 목록
-    base_marker_id: 1                   # 기준 마커 ID (-1: 첫 번째 마커)
-    tag_size: 0.02778                   # 태그 크기 (m)
-    tag_family: 'tagStandard41h12'      # 태그 패밀리 (tag36h11 | tagStandard41h12)
+    # 공통 AprilTag 설정
+    tag_size: 0.02778
+    tag_family: 'tagStandard41h12'
 
-    # 마커별 6-DoF 오프셋 (base_marker 프레임 기준)
-    # Flat list: 마커마다 6개 값, marker_ids 순서대로
-    #   [x, y, z, roll, pitch, yaw]   (m, rad)
-    # base_marker_id에 해당하는 항목은 모두 0이어야 함 (아니면 WARN 후 강제 0).
-    # 회전 합성 순서: R = Rz(yaw) * Ry(pitch) * Rx(roll)  (intrinsic Z-Y-X)
-    marker_offsets: [
-      -0.065,  0.000,  0.000,   0.0000,  0.0000,  0.0000,   # marker 0
-       0.000,  0.000,  0.000,   0.0000,  0.0000,  0.0000,   # marker 1 (base)
-       0.065,  0.000,  0.000,   0.0000,  0.0000,  0.0000,   # marker 2
-    ]
-
-    # 타겟 포인트 (x, y, z, roll, pitch, yaw) x N
-    target_points: [
-         0.000, 0.000, 0.000,  0.000, 0.000, 0.0000,  # Point 0 (x y z r p y)
-         0.000, 0.000, 0.000,  0.000, 0.000, 1.5708,  # Point 1 (x y z r p y)
-    ]
-
-    # 입력 토픽
-    camera_topic: 'camera/camera/color/image_raw'         # 카메라 이미지 입력
-    camera_info_topic: 'camera/camera/color/camera_info'  # 카메라 정보 입력
+    # 입력 / 출력 토픽 (yaml에 적으면 그 값, 없으면 ~/<topic> 자동 사용)
+    camera_topic: 'camera/camera/color/image_raw'
+    camera_info_topic: 'camera/camera/color/camera_info'
     camera_frame: 'camera_color_optical_frame'
-
-    # 왜곡 처리
-    #   false: rectified 이미지 사용 (왜곡 없음)
-    #   true : raw 이미지 사용, camera_info.d 의 왜곡 계수로 PnP 수행
     use_distortion_from_camera_info: false
 
-    # 출력 옵션
-    publish_visualization: true         # RViz2 마커 퍼블리시
-    publish_detection_image: true       # 검출 오버레이 이미지 퍼블리시
+    target_poses_topic:    'pose_estimator_node/target_poses'
+    group_names_topic:     'pose_estimator_node/group_names'      # latched
+    group_status_topic:    'pose_estimator_node/group_status'
+    detection_image_topic: 'pose_estimator_node/detection_image'
 
-    # 서비스 옵션
-    show_service_result_window: false   # 서비스 결과 OpenCV 윈도우 (headless 시 false)
-    display_width: 0                    # 결과 윈도우 너비 (0 = 원본 크기)
-    display_height: 0                   # 결과 윈도우 높이 (0 = 원본 크기)
+    publish_detection_image: true
+
+    # ---- Multi-group 정의 ----
+    # 각 그룹은 base marker의 pose 1개를 출력. group_names 순서가 PoseArray / group_status 순서.
+    group_names:
+      - default
+      - secondary
+
+    groups:
+      default:
+        marker_ids: [0, 1, 2]
+        base_marker_id: 1
+        # 마커마다 6 doubles [x, y, z, roll, pitch, yaw] (m, rad), T_base <- marker_i
+        # base_marker entry는 정의상 모두 0 (자동 강제)
+        marker_offsets: [
+          -0.065,  0.000,  0.000,   0.0000,  0.0000,  0.0000,   # marker 0
+           0.000,  0.000,  0.000,   0.0000,  0.0000,  0.0000,   # marker 1 (base)
+           0.065,  0.000,  0.000,   0.0000,  0.0000,  0.0000,   # marker 2
+        ]
+
+      secondary:
+        marker_ids: [10, 11, 12]
+        base_marker_id: 11
+        marker_offsets: [
+          -0.065,  0.000,  0.000,   0.0000,  0.0000,  0.0000,
+           0.000,  0.000,  0.000,   0.0000,  0.0000,  0.0000,
+           0.065,  0.000,  0.000,   0.0000,  0.0000,  0.0000,
+        ]
 ```
+
+> **v3.0.0 ABI break**
+>
+> - yaml: `group_names` + `groups.<name>.{...}` 스키마가 필수. 단일 그룹만 사용해도 `group_names: [<your_group>]` + `groups.<your_group>.{...}` 형태로 명시해야 함. 이전 단일 그룹 형식(`marker_ids` / `marker_offsets` / `target_points` 최상위)은 더 이상 지원하지 않음.
+> - srv: `TargetPointPose.srv` request에 `string group_name` 필드 추가. 빈 문자열은 group_names의 첫 그룹을 가리킴.
+> - 출력: `target_points` 개념 제거. 각 그룹은 base marker pose 1개만 출력하므로 `PoseArray.poses[i]`가 `group_names[i]`와 1:1 매핑.
 
 ### 주요 파라미터 설명
 
 - **tag_size**: AprilTag 검은색 사각형의 한 변 길이(m). 정확도에 직접적으로 영향
 - **marker_offsets**: 마커별 base_marker 기준 6-DoF 변환 (T_base ← marker_i). `marker_ids` 순서대로 마커마다 6개 값 `[x, y, z, roll, pitch, yaw]`(m, rad)을 평면 리스트로 나열. `base_marker_id`에 해당하는 항목은 정의상 identity (모두 0)여야 하며, 0이 아니면 WARN 후 강제 0 처리됨. 마커 수가 `N`이면 총 `6N`개. 회전 합성은 `R = Rz(yaw) * Ry(pitch) * Rx(roll)` (intrinsic Z-Y-X)
-- **target_points**: 베이스 마커 기준 타겟 포인트의 상대 위치 및 회전 (라디안)
 - **use_distortion_from_camera_info**: PnP 시 사용할 왜곡 계수 소스 선택
   - `false` (기본): 왜곡 계수를 0 으로 간주. 이미 rectified 된 이미지를 퍼블리시하는 카메라에 사용
   - `true`: `camera_info.d` 의 값을 그대로 사용. raw 이미지를 퍼블리시하는 카메라에 사용
@@ -634,12 +651,13 @@ pose_estimator_node:
 
 ### Published 토픽
 
-| 토픽                                   | 타입                                        | 퍼블리셔            | 설명                  |
-| -------------------------------------- | ------------------------------------------- | ------------------- | --------------------- |
-| `/pose_estimator_node/tag_detections`  | `apriltag_pose_estimator_msgs/TagDetection` | pose_estimator_node | 태그 검출 데이터      |
-| `/pose_estimator_node/target_poses`    | `geometry_msgs/PoseArray`                   | pose_estimator_node | 타겟 포인트 포즈 배열 |
-| `/pose_estimator_node/detection_image` | `sensor_msgs/Image`                         | pose_estimator_node | 검출 오버레이 이미지  |
-| `/visualization_markers`               | `visualization_msgs/MarkerArray`            | pose_estimator_node | RViz2 시각화 마커     |
+| 토픽                                   | 타입                                        | QoS / 비고                                   | 설명                                                           |
+| -------------------------------------- | ------------------------------------------- | -------------------------------------------- | -------------------------------------------------------------- |
+| `/pose_estimator_node/tag_detections`  | `apriltag_pose_estimator_msgs/TagDetection` | KEEP_LAST(10)                                | Raw 검출 데이터 (debug. multi-group에선 첫 그룹 rvec/tvec)     |
+| `/pose_estimator_node/target_poses`    | `geometry_msgs/PoseArray`                   | KEEP_LAST(10)                                | 각 그룹의 base marker pose (group_names 순서, 실패 그룹은 NaN) |
+| `/pose_estimator_node/group_names`     | `std_msgs/String`                           | **transient_local + KEEP_LAST(1)** (latched) | 그룹 이름 CSV. boot 동기화용                                   |
+| `/pose_estimator_node/group_status`    | `std_msgs/UInt8MultiArray`                  | KEEP_LAST(10)                                | group_names 순서대로 0(invalid) / 1(valid)                     |
+| `/pose_estimator_node/detection_image` | `sensor_msgs/Image` (BGR8)                  | KEEP_LAST(10), subscriber 0이면 publish skip | 모든 그룹 검출 결과를 한 이미지에 누적 오버레이                |
 
 ### Subscribed 토픽
 
@@ -672,13 +690,16 @@ float64    tag_size        # 태그 크기 (m)
 ```srv
 # Request
 builtin_interfaces/Time request_time    # 요청 시각
+string group_name                       # 조회 그룹 이름 ("" = 첫/default 그룹)
 ---
 # Response
 bool success                            # 성공 여부
 string message                          # 상태 메시지
 builtin_interfaces/Time data_time       # 데이터 타임스탬프
-geometry_msgs/PoseArray poses           # 타겟 포즈 배열
+geometry_msgs/PoseArray poses           # 해당 그룹의 base marker pose (요소 1개)
 ```
+
+> `group_name` 필드는 multi-group 지원을 위해 추가됨. 빈 문자열은 첫 그룹(legacy 모드에선 `default`)을 가리켜 후방 호환. 알 수 없는 그룹 이름은 service error.
 
 ### 네트워크 구성 (Docker)
 

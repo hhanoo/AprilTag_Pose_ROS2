@@ -78,9 +78,10 @@ def quat_to_rpy_deg(qx: float, qy: float, qz: float, qw: float) -> tuple:
 
 
 class JitterProbe(Node):
-    def __init__(self, service_name: str):
+    def __init__(self, service_name: str, group_name: str = ""):
         super().__init__("jitter_probe")
         self.client = self.create_client(TargetPointPose, service_name)
+        self.group_name = group_name
         self.get_logger().info(f"waiting for service: {service_name}")
         if not self.client.wait_for_service(timeout_sec=10.0):
             raise RuntimeError(f"service not available: {service_name}")
@@ -89,6 +90,7 @@ class JitterProbe(Node):
     def call_once(self) -> TargetPointPose.Response:
         req = TargetPointPose.Request()
         req.request_time = TimeMsg(sec=0, nanosec=0)  # always older than latest
+        req.group_name = self.group_name  # "" → first/default group
         future = self.client.call_async(req)
         rclpy.spin_until_future_complete(self, future, timeout_sec=2.0)
         return future.result()
@@ -175,6 +177,11 @@ def main() -> None:
         help="service name",
     )
     parser.add_argument(
+        "--group",
+        default="",
+        help="group name to query (default: '' → first/default group)",
+    )
+    parser.add_argument(
         "--point-index",
         type=int,
         default=0,
@@ -241,7 +248,7 @@ def main() -> None:
         print(f"csv : {csv_path}")
 
     rclpy.init()
-    probe = JitterProbe(args.service)
+    probe = JitterProbe(args.service, group_name=args.group)
 
     # ---------- Query node parameters (best-effort) ----------
     if not args.no_params:

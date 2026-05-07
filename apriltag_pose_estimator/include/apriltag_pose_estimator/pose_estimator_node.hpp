@@ -4,11 +4,14 @@
 #include <cv_bridge/cv_bridge.h>
 
 #include <geometry_msgs/msg/pose_array.hpp>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/camera_info.hpp>
 #include <sensor_msgs/msg/image.hpp>
+#include <std_msgs/msg/string.hpp>
+#include <std_msgs/msg/u_int8_multi_array.hpp>
 #include <string>
 #include <vector>
 
@@ -19,6 +22,14 @@
 #include "apriltag_pose_estimator_msgs/srv/target_point_pose.hpp"
 
 namespace apriltag_pose_estimator {
+
+// Per-group config parsed from yaml (groups.<name>.{...})
+// Each group outputs the base marker pose (camera frame). No per-target offsets.
+struct GroupConfig {
+    std::vector<int64_t> marker_ids;      // Marker IDs
+    int64_t              base_marker_id;  // Base marker ID
+    std::vector<double>  marker_offsets;  // 6N flat (T_base <- marker_i)
+};
 
 class PoseEstimatorNode : public rclcpp::Node {
    public:
@@ -46,22 +57,24 @@ class PoseEstimatorNode : public rclcpp::Node {
         std::shared_ptr<apriltag_pose_estimator_msgs::srv::TargetPointPose::Response> response);
 
     // ========================================================================
-    // Publishers
+    // Group Parameter Parsing
     // ========================================================================
-    void publishTagDetection();
+    // yaml must define non-empty group_names (multi-group only since v3.0.0).
+    void parseGroupsFromParams();
 
     // ========================================================================
-    // Helper Functions
+    // Publishers / Service Helpers
     // ========================================================================
-    geometry_msgs::msg::Pose matrixToPose(
-        const Eigen::Matrix4f& matrix  // 4x4 transformation matrix
-    );
+    void                     publishGroupNamesLatched();                               // Once at startup (transient_local)
+    void                     publishTagDetection(const std::string& reference_group);  // Use reference_group's rvec/tvec
+    geometry_msgs::msg::Pose matrixToPose(const Eigen::Matrix4f& matrix);
+    geometry_msgs::msg::Pose makeNanPose();  // Fill failed groups
 
     // ========================================================================
-    // Detectors
+    // Detector / Estimator
     // ========================================================================
-    std::unique_ptr<AprilTagDetector>      detector_;   // AprilTag detector
-    std::unique_ptr<MultiTagPoseEstimator> estimator_;  // Multi-tag pose estimator
+    std::unique_ptr<AprilTagDetector>                             detector_;    // Single, group-agnostic
+    std::map<std::string, std::unique_ptr<MultiTagPoseEstimator>> estimators_;  // Per-group
 
     // ========================================================================
     // ROS2 Communication
@@ -71,7 +84,11 @@ class PoseEstimatorNode : public rclcpp::Node {
     rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr camera_info_sub_;  // Camera info subscriber
 
     // Publishers
-    rclcpp::Publisher<apriltag_pose_estimator_msgs::msg::TagDetection>::SharedPtr tag_detection_pub_;
+    rclcpp::Publisher<apriltag_pose_estimator_msgs::msg::TagDetection>::SharedPtr tag_detection_pub_;    // Raw detection (debug)
+    rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr                   target_poses_pub_;     // Per-group base marker pose
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr                           group_names_pub_;      // Latched group names CSV
+    rclcpp::Publisher<std_msgs::msg::UInt8MultiArray>::SharedPtr                  group_status_pub_;     // Per-group valid bits
+    rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr                         detection_image_pub_;  // BGR8 overlay
 
     // Services
     rclcpp::Service<apriltag_pose_estimator_msgs::srv::TargetPointPose>::SharedPtr target_point_pose_server_;
@@ -86,45 +103,46 @@ class PoseEstimatorNode : public rclcpp::Node {
     bool        use_distortion_from_camera_info_;  // Use distortion coefficients from camera_info.d
 
     // ========================================================================
-    // Parameters
+    // Common Parameters
     // ========================================================================
-    std::vector<int64_t>     marker_ids_;                  // Marker IDs to use
-    int64_t                  base_marker_id_;              // Base marker ID
-    double                   tag_size_;                    // Tag size in meters
-    std::string              tag_family_;                  // AprilTag family
-    std::vector<double>      marker_offsets_;              // 6N flat: [x,y,z,r,p,yaw] per marker, T_base <- marker_i (m, rad)
-    std::vector<double>      target_points_flat_;          // Target points (Nx6 flat list)
-    std::vector<TargetPoint> target_points_;               // Target points
-    bool                     show_service_result_window_;  // Show result window on service call
-    int                      display_width_;               // Display window width (0 = original)
-    int                      display_height_;              // Display window height (0 = original)
+    double      tag_size_;                    // Tag size in meters
+    std::string tag_family_;                  // AprilTag family
+    bool        publish_detection_image_;     // Publish detection_image (skip if no subscriber)
+    bool        show_service_result_window_;  // Show OpenCV window on service call
+    int         display_width_;               // Display window width (0 = original)
+    int         display_height_;              // Display window height (0 = original)
 
     // ========================================================================
-    // Topic Names
+    // Topic / Service Names
     // ========================================================================
-    std::string camera_topic_;         // Camera image topic
-    std::string camera_info_topic_;    // Camera info topic
-    std::string tag_detection_topic_;  // Tag detection info topic
+    std::string camera_topic_;               // Input camera image topic
+    std::string camera_info_topic_;          // Input camera info topic
+    std::string tag_detection_topic_;        // Output: raw TagDetection (debug)
+    std::string target_poses_topic_;         // Output: PoseArray (per-group base marker pose)
+    std::string group_names_topic_;          // Output: latched String CSV
+    std::string group_status_topic_;         // Output: per-group 0/1 valid bits
+    std::string detection_image_topic_;      // Output: BGR8 overlay image
+    std::string target_point_pose_service_;  // Service name
 
     // ========================================================================
-    // Service Names
+    // Multi-Group State
     // ========================================================================
-    std::string target_point_pose_service_;  // Target point pose service name
+    std::vector<std::string>           group_names_;  // Publish/iteration order (yaml declaration order)
+    std::map<std::string, GroupConfig> group_configs_;
+
+    // For change-detection logging
+    std::vector<int> last_detected_ids_;
 
     // ========================================================================
-    // State
+    // Latest Detection Results (Per Group, for service)
     // ========================================================================
-    bool             detection_active_;   // Detection active flag
-    std::vector<int> last_detected_ids_;  // Last detected tag IDs
-
-    // Latest detection results for service
-    std::mutex                   detection_mutex_;      // Mutex for thread-safe access
-    bool                         latest_tag_detected_;  // Latest tag detected flag
-    cv::Mat                      latest_rvec_;          // Latest rotation vector
-    cv::Mat                      latest_tvec_;          // Latest translation vector
-    cv::Mat                      latest_vis_image_;     // Latest visualization image
-    std::vector<Eigen::Matrix4f> latest_transforms_;    // Latest target point transforms
-    rclcpp::Time                 latest_timestamp_;     // Latest detection timestamp
+    std::mutex                                          detection_mutex_;
+    std::map<std::string, bool>                         latest_valid_per_group_;  // Last estimate success per group
+    std::map<std::string, cv::Mat>                      latest_rvec_per_group_;
+    std::map<std::string, cv::Mat>                      latest_tvec_per_group_;
+    std::map<std::string, std::vector<Eigen::Matrix4f>> latest_transforms_per_group_;
+    cv::Mat                                             latest_vis_image_;  // Single image with all-group overlays
+    rclcpp::Time                                        latest_timestamp_;
 };
 
 }  // namespace apriltag_pose_estimator

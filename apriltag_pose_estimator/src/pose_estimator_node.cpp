@@ -1,118 +1,122 @@
 #include "apriltag_pose_estimator/pose_estimator_node.hpp"
 
 #include <Eigen/Geometry>
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <limits>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
+#include <sstream>
 
 namespace apriltag_pose_estimator {
+
+namespace {
+
+// NaN pose for failed group detection (avoid zero-pose ambiguity)
+geometry_msgs::msg::Pose nanPose() {
+    geometry_msgs::msg::Pose p;
+    const float              nan = std::numeric_limits<float>::quiet_NaN();
+    p.position.x                 = nan;
+    p.position.y                 = nan;
+    p.position.z                 = nan;
+    p.orientation.x              = nan;
+    p.orientation.y              = nan;
+    p.orientation.z              = nan;
+    p.orientation.w              = nan;
+    return p;
+}
+
+// Identity target point (zero translation/rotation) → estimator returns base marker pose
+TargetPoint identityTargetPoint() {
+    TargetPoint tp;
+    tp.position     = Eigen::Vector3f::Zero();
+    tp.rotation_rpy = Eigen::Vector3f::Zero();
+    return tp;
+}
+
+}  // namespace
 
 // ========================================================================
 // Constructor
 // ========================================================================
 PoseEstimatorNode::PoseEstimatorNode()
     : Node("pose_estimator_node"),
-      camera_info_received_(false),
-      detection_active_(false) {
-    // ---------- Declare Parameters ----------
-    // * AprilTag configuration
-    this->declare_parameter("marker_ids", std::vector<int64_t>{0, 1, 2});
-    this->declare_parameter("base_marker_id", -1);
+      camera_info_received_(false) {
+    // ---------- Common AprilTag Parameters ----------
     this->declare_parameter("tag_size", 0.02778);
     this->declare_parameter("tag_family", "tagStandard41h12");
-    this->declare_parameter("marker_offsets", std::vector<double>{
-                                                  -0.065, 0.0, 0.0, 0.0, 0.0, 0.0,  // marker 0
-                                                  +0.000, 0.0, 0.0, 0.0, 0.0, 0.0,  // marker 1 (base)
-                                                  +0.065, 0.0, 0.0, 0.0, 0.0, 0.0,  // marker 2
-                                              });
-    this->declare_parameter("target_points", std::vector<double>{
-                                                 0.000, 0.000, 0.000, 0.000, 0.000, 0.000,  // Point 1 (x y z r p y)
-                                                 0.000, 0.000, 0.000, 0.000, 0.000, 0.000   // Point 2 (x y z r p y)
-                                             });
+    this->declare_parameter("publish_detection_image", false);
     this->declare_parameter("show_service_result_window", false);
     this->declare_parameter("display_width", 0);
     this->declare_parameter("display_height", 0);
-    // * Input topics
+
+    // ---------- Input Topics ----------
     this->declare_parameter("camera_topic", "/camera/color/image_raw");
     this->declare_parameter("camera_info_topic", "/camera/color/camera_info");
     this->declare_parameter("camera_frame", "camera_color_optical_frame");
-    // * Distortion handling parameter
     this->declare_parameter("use_distortion_from_camera_info", false);
-    // * Output topics
-    this->declare_parameter("tag_detection_topic", "pose_estimator_node/tag_detections");
-    // * Service server
-    this->declare_parameter("target_point_pose_service", "pose_estimator_node/target_point_pose");
 
-    // ---------- Get Parameters ----------
-    // * AprilTag configuration
-    marker_ids_                 = this->get_parameter("marker_ids").as_integer_array();
-    base_marker_id_             = this->get_parameter("base_marker_id").as_int();
-    tag_size_                   = this->get_parameter("tag_size").as_double();
-    tag_family_                 = this->get_parameter("tag_family").as_string();
-    marker_offsets_             = this->get_parameter("marker_offsets").as_double_array();
-    target_points_flat_         = this->get_parameter("target_points").as_double_array();
-    show_service_result_window_ = this->get_parameter("show_service_result_window").as_bool();
-    display_width_              = this->get_parameter("display_width").as_int();
-    display_height_             = this->get_parameter("display_height").as_int();
+    // ---------- Output Topics (yaml override or ~/<topic> default) ----------
+    this->declare_parameter("tag_detection_topic", "~/tag_detections");
+    this->declare_parameter("target_poses_topic", "~/target_poses");
+    this->declare_parameter("group_names_topic", "~/group_names");
+    this->declare_parameter("group_status_topic", "~/group_status");
+    this->declare_parameter("detection_image_topic", "~/detection_image");
 
-    // * Input topics
-    camera_topic_      = this->get_parameter("camera_topic").as_string();
-    camera_info_topic_ = this->get_parameter("camera_info_topic").as_string();
-    camera_frame_      = this->get_parameter("camera_frame").as_string();
+    // ---------- Service ----------
+    this->declare_parameter("target_point_pose_service", "~/target_point_pose");
 
-    // * Output topics
-    tag_detection_topic_ = this->get_parameter("tag_detection_topic").as_string();
+    // ---------- Get Common Parameters ----------
+    tag_size_                        = this->get_parameter("tag_size").as_double();
+    tag_family_                      = this->get_parameter("tag_family").as_string();
+    publish_detection_image_         = this->get_parameter("publish_detection_image").as_bool();
+    show_service_result_window_      = this->get_parameter("show_service_result_window").as_bool();
+    display_width_                   = this->get_parameter("display_width").as_int();
+    display_height_                  = this->get_parameter("display_height").as_int();
+    camera_topic_                    = this->get_parameter("camera_topic").as_string();
+    camera_info_topic_               = this->get_parameter("camera_info_topic").as_string();
+    camera_frame_                    = this->get_parameter("camera_frame").as_string();
+    use_distortion_from_camera_info_ = this->get_parameter("use_distortion_from_camera_info").as_bool();
+    tag_detection_topic_             = this->get_parameter("tag_detection_topic").as_string();
+    target_poses_topic_              = this->get_parameter("target_poses_topic").as_string();
+    group_names_topic_               = this->get_parameter("group_names_topic").as_string();
+    group_status_topic_              = this->get_parameter("group_status_topic").as_string();
+    detection_image_topic_           = this->get_parameter("detection_image_topic").as_string();
+    target_point_pose_service_       = this->get_parameter("target_point_pose_service").as_string();
 
-    // * Service server
-    target_point_pose_service_ = this->get_parameter("target_point_pose_service").as_string();
-
-    // * Distortion handling
-    use_distortion_from_camera_info_ =
-        this->get_parameter("use_distortion_from_camera_info").as_bool();
+    // ---------- Group Parameters ----------
+    parseGroupsFromParams();
 
     // ---------- OpenCV GUI Thread ----------
     cv::startWindowThread();
 
-    // ---------- Data Conversion ----------
-    // * Convert marker_ids to int vector
-    std::vector<int> marker_ids_int;
-    for (auto id : marker_ids_) {
-        marker_ids_int.push_back(static_cast<int>(id));
-    }
-
-    // * Convert target_points_flat_ to TargetPoint vector
-    for (size_t i = 0; i < target_points_flat_.size() / 6; i++) {
-        TargetPoint target_point;
-        target_point.position(0)     = static_cast<float>(target_points_flat_[i * 6]);
-        target_point.position(1)     = static_cast<float>(target_points_flat_[i * 6 + 1]);
-        target_point.position(2)     = static_cast<float>(target_points_flat_[i * 6 + 2]);
-        target_point.rotation_rpy(0) = static_cast<float>(target_points_flat_[i * 6 + 3]);
-        target_point.rotation_rpy(1) = static_cast<float>(target_points_flat_[i * 6 + 4]);
-        target_point.rotation_rpy(2) = static_cast<float>(target_points_flat_[i * 6 + 5]);
-        target_points_.push_back(target_point);
-    }
-
-    // ---------- Initialize Components ----------
-    // Create detector
+    // ---------- Detector ----------
     detector_ = std::make_unique<AprilTagDetector>(tag_family_, tag_size_);
 
-    // ---------- Create subscribers ----------
+    // ---------- Subscribers ----------
     image_sub_ = this->create_subscription<sensor_msgs::msg::Image>(
         camera_topic_,
         10,
         std::bind(&PoseEstimatorNode::imageCallback, this, std::placeholders::_1));
-
     camera_info_sub_ = this->create_subscription<sensor_msgs::msg::CameraInfo>(
         camera_info_topic_,
         10,
         std::bind(&PoseEstimatorNode::cameraInfoCallback, this, std::placeholders::_1));
 
-    // ---------- Create publishers ----------
+    // ---------- Publishers ----------
     tag_detection_pub_ = this->create_publisher<apriltag_pose_estimator_msgs::msg::TagDetection>(
         tag_detection_topic_, 10);
+    target_poses_pub_ = this->create_publisher<geometry_msgs::msg::PoseArray>(
+        target_poses_topic_, 10);
+    // group_names / group_status: latched (transient_local + KEEP_LAST(1) + reliable)
+    auto latched_qos  = rclcpp::QoS(rclcpp::KeepLast(1)).reliable().transient_local();
+    group_names_pub_  = this->create_publisher<std_msgs::msg::String>(group_names_topic_, latched_qos);
+    group_status_pub_ = this->create_publisher<std_msgs::msg::UInt8MultiArray>(group_status_topic_, 10);
+    detection_image_pub_ =
+        this->create_publisher<sensor_msgs::msg::Image>(detection_image_topic_, 10);
 
-    // ---------- Service server ----------
+    // ---------- Service ----------
     target_point_pose_server_ = this->create_service<apriltag_pose_estimator_msgs::srv::TargetPointPose>(
         target_point_pose_service_,
         std::bind(&PoseEstimatorNode::targetPointPoseServiceCallback,
@@ -120,53 +124,107 @@ PoseEstimatorNode::PoseEstimatorNode()
                   std::placeholders::_1,
                   std::placeholders::_2));
 
-    // ---------- Initialize camera distortion coefficients ----------
+    // ---------- Initial state ----------
     dist_coeffs_ = cv::Mat::zeros(5, 1, CV_64F);
+    for (const auto& name : group_names_) {
+        latest_valid_per_group_[name]      = false;
+        latest_rvec_per_group_[name]       = cv::Mat::zeros(3, 1, CV_64F);
+        latest_tvec_per_group_[name]       = cv::Mat::zeros(3, 1, CV_64F);
+        latest_transforms_per_group_[name] = {};
+    }
 
+    // ---------- Latched group_names publish ----------
+    publishGroupNamesLatched();
+
+    // ---------- Logging ----------
     RCLCPP_INFO(this->get_logger(), "AprilTag Pose Estimator initialized");
-    RCLCPP_INFO(this->get_logger(), "  Marker IDs: [%s]",
-                [&]() {
-                    std::string ids_str;
-                    for (size_t i = 0; i < marker_ids_int.size(); i++) {
-                        ids_str += std::to_string(marker_ids_int[i]);
-                        if (i < marker_ids_int.size() - 1)
-                            ids_str += ", ";
-                    }
-                    return ids_str;
-                }()
-                    .c_str());
     RCLCPP_INFO(this->get_logger(), "  Tag family: %s", tag_family_.c_str());
     RCLCPP_INFO(this->get_logger(), "  Tag size: %.5f m", tag_size_);
-    if (marker_offsets_.size() == marker_ids_int.size() * 6) {
-        RCLCPP_INFO(this->get_logger(), "  Marker offsets (T_base <- marker_i):");
-        for (size_t i = 0; i < marker_ids_int.size(); i++) {
-            RCLCPP_INFO(this->get_logger(),
-                        "    id=%d : t=(%.4f, %.4f, %.4f) m  rpy=(%.4f, %.4f, %.4f) rad",
-                        marker_ids_int[i],
-                        marker_offsets_[i * 6 + 0], marker_offsets_[i * 6 + 1], marker_offsets_[i * 6 + 2],
-                        marker_offsets_[i * 6 + 3], marker_offsets_[i * 6 + 4], marker_offsets_[i * 6 + 5]);
+    RCLCPP_INFO(this->get_logger(), "  Groups (%zu):", group_names_.size());
+    for (const auto& name : group_names_) {
+        const auto&        g = group_configs_.at(name);
+        std::ostringstream ids_ss;
+        for (size_t i = 0; i < g.marker_ids.size(); i++) {
+            if (i)
+                ids_ss << ", ";
+            ids_ss << g.marker_ids[i];
         }
+        RCLCPP_INFO(this->get_logger(), "    [%s] marker_ids=[%s] base=%ld",
+                    name.c_str(), ids_ss.str().c_str(), g.base_marker_id);
     }
-    RCLCPP_INFO(this->get_logger(), "  Target points: %zu", target_points_.size());
-    RCLCPP_INFO(this->get_logger(), "  Target point pose service: %s", target_point_pose_service_.c_str());
-    RCLCPP_INFO(this->get_logger(), "  Show service result window: %s",
-                show_service_result_window_ ? "true" : "false");
+    RCLCPP_INFO(this->get_logger(), "  Service: %s", target_point_pose_service_.c_str());
+    RCLCPP_INFO(this->get_logger(), "  publish_detection_image: %s",
+                publish_detection_image_ ? "true" : "false");
 }
 
 // ========================================================================
-// Callback Functions
+// Group Parameter Parsing
+// ========================================================================
+void PoseEstimatorNode::parseGroupsFromParams() {
+    // group_names is required (multi-group only since v3.0.0)
+    this->declare_parameter("group_names", std::vector<std::string>{});
+    auto names = this->get_parameter("group_names").as_string_array();
+
+    if (names.empty()) {
+        RCLCPP_FATAL(this->get_logger(),
+                     "yaml must define non-empty 'group_names'. "
+                     "Single-group legacy mode was removed in v3.0.0.");
+        rclcpp::shutdown();
+        return;
+    }
+
+    group_names_ = names;
+    for (const auto& name : names) {
+        const std::string prefix = "groups." + name + ".";
+        this->declare_parameter(prefix + "marker_ids", std::vector<int64_t>{});
+        this->declare_parameter(prefix + "base_marker_id", -1);
+        this->declare_parameter(prefix + "marker_offsets", std::vector<double>{});
+
+        GroupConfig g;
+        g.marker_ids     = this->get_parameter(prefix + "marker_ids").as_integer_array();
+        g.base_marker_id = this->get_parameter(prefix + "base_marker_id").as_int();
+        g.marker_offsets = this->get_parameter(prefix + "marker_offsets").as_double_array();
+        if (g.marker_ids.empty()) {
+            RCLCPP_FATAL(this->get_logger(),
+                         "Group '%s' has empty marker_ids. Define %smarker_ids in yaml.",
+                         name.c_str(), prefix.c_str());
+            rclcpp::shutdown();
+            return;
+        }
+        group_configs_[name] = std::move(g);
+    }
+}
+
+// ========================================================================
+// Latched Group Names Publish
+// ========================================================================
+void PoseEstimatorNode::publishGroupNamesLatched() {
+    std_msgs::msg::String msg;
+    std::ostringstream    ss;
+    for (size_t i = 0; i < group_names_.size(); i++) {
+        if (i)
+            ss << ",";
+        ss << group_names_[i];
+    }
+    msg.data = ss.str();
+    group_names_pub_->publish(msg);
+    RCLCPP_INFO(this->get_logger(), "Published latched group_names: '%s'", msg.data.c_str());
+}
+
+// ========================================================================
+// Camera Info Callback
 // ========================================================================
 void PoseEstimatorNode::cameraInfoCallback(const sensor_msgs::msg::CameraInfo::SharedPtr msg) {
     if (camera_info_received_) {
-        return;  // Already received
+        return;
     }
 
     // Extract camera matrix
     camera_matrix_                  = cv::Mat::eye(3, 3, CV_64F);
-    camera_matrix_.at<double>(0, 0) = msg->k[0];  // fx
-    camera_matrix_.at<double>(1, 1) = msg->k[4];  // fy
-    camera_matrix_.at<double>(0, 2) = msg->k[2];  // cx
-    camera_matrix_.at<double>(1, 2) = msg->k[5];  // cy
+    camera_matrix_.at<double>(0, 0) = msg->k[0];
+    camera_matrix_.at<double>(1, 1) = msg->k[4];
+    camera_matrix_.at<double>(0, 2) = msg->k[2];
+    camera_matrix_.at<double>(1, 2) = msg->k[5];
 
     // Extract distortion coefficients
     if (!msg->d.empty()) {
@@ -176,59 +234,7 @@ void PoseEstimatorNode::cameraInfoCallback(const sensor_msgs::msg::CameraInfo::S
         }
     }
 
-    // Convert marker_ids to int vector
-    std::vector<int> marker_ids_int;
-    for (auto id : marker_ids_) {
-        marker_ids_int.push_back(static_cast<int>(id));
-    }
-
-    // ---------- Validate marker_offsets (6N flat) ----------
-    const size_t N = marker_ids_.size();
-    if (marker_offsets_.size() != N * 6) {
-        RCLCPP_FATAL(this->get_logger(),
-                     "marker_offsets size mismatch: expected %zu (= 6 * %zu), got %zu. "
-                     "Each marker requires [x, y, z, roll, pitch, yaw].",
-                     N * 6, N, marker_offsets_.size());
-        rclcpp::shutdown();
-        return;
-    }
-
-    // Locate base marker index in marker_ids
-    int base_index = -1;
-    for (size_t i = 0; i < N; i++) {
-        if (static_cast<int>(marker_ids_[i]) == static_cast<int>(base_marker_id_)) {
-            base_index = static_cast<int>(i);
-            break;
-        }
-    }
-    if (base_index < 0) {
-        RCLCPP_FATAL(this->get_logger(),
-                     "base_marker_id=%ld not found in marker_ids", base_marker_id_);
-        rclcpp::shutdown();
-        return;
-    }
-
-    // base_marker entry must be identity (0,0,0, 0,0,0). Force to 0 with WARN.
-    for (int k = 0; k < 6; k++) {
-        double v = marker_offsets_[base_index * 6 + k];
-        if (std::abs(v) > 1e-9) {
-            RCLCPP_WARN(this->get_logger(),
-                        "base_marker_id=%ld marker_offsets[%d]=%.6f is non-zero; forcing to 0",
-                        base_marker_id_, base_index * 6 + k, v);
-            marker_offsets_[base_index * 6 + k] = 0.0;
-        }
-    }
-
-    // Convert marker_offsets to float vector
-    std::vector<float> marker_offsets_float;
-    marker_offsets_float.reserve(marker_offsets_.size());
-    for (auto offset : marker_offsets_) {
-        marker_offsets_float.push_back(static_cast<float>(offset));
-    }
-
-    // Distortion coefficients for PnP.
-    //   - false (default): zeros — 입력 이미지가 이미 rectified 인 경우.
-    //   - true           : camera_info.d 를 그대로 사용. raw 이미지를 구독할 때 필요.
+    // Distortion for PnP — false: zeros (rectified image), true: camera_info.d
     cv::Mat dist_for_pnp;
     if (use_distortion_from_camera_info_) {
         dist_for_pnp = dist_coeffs_;
@@ -236,15 +242,70 @@ void PoseEstimatorNode::cameraInfoCallback(const sensor_msgs::msg::CameraInfo::S
         dist_for_pnp = cv::Mat::zeros(5, 1, CV_64F);
     }
 
-    // Create estimator now that we have camera info
-    estimator_ = std::make_unique<MultiTagPoseEstimator>(
-        marker_ids_int,
-        marker_offsets_float,
-        target_points_,
-        tag_size_,
-        camera_matrix_,
-        dist_for_pnp,
-        static_cast<int>(base_marker_id_));
+    // ---------- Validate each group + create estimators ----------
+    for (const auto& name : group_names_) {
+        auto& g = group_configs_.at(name);
+
+        const size_t N = g.marker_ids.size();
+        if (g.marker_offsets.size() != N * 6) {
+            RCLCPP_FATAL(this->get_logger(),
+                         "[%s] marker_offsets size mismatch: expected %zu (= 6 * %zu), got %zu",
+                         name.c_str(), N * 6, N, g.marker_offsets.size());
+            rclcpp::shutdown();
+            return;
+        }
+
+        // Locate base marker index
+        int base_index = -1;
+        for (size_t i = 0; i < N; i++) {
+            if (static_cast<int>(g.marker_ids[i]) == static_cast<int>(g.base_marker_id)) {
+                base_index = static_cast<int>(i);
+                break;
+            }
+        }
+        if (base_index < 0) {
+            RCLCPP_FATAL(this->get_logger(),
+                         "[%s] base_marker_id=%ld not found in marker_ids",
+                         name.c_str(), g.base_marker_id);
+            rclcpp::shutdown();
+            return;
+        }
+
+        // Force base entry to identity (zero) with WARN if non-zero
+        for (int k = 0; k < 6; k++) {
+            double v = g.marker_offsets[base_index * 6 + k];
+            if (std::abs(v) > 1e-9) {
+                RCLCPP_WARN(this->get_logger(),
+                            "[%s] base_marker marker_offsets[%d]=%.6f non-zero; forcing to 0",
+                            name.c_str(), base_index * 6 + k, v);
+                g.marker_offsets[base_index * 6 + k] = 0.0;
+            }
+        }
+
+        // Build inputs for MultiTagPoseEstimator
+        std::vector<int> marker_ids_int;
+        marker_ids_int.reserve(g.marker_ids.size());
+        for (auto id : g.marker_ids) {
+            marker_ids_int.push_back(static_cast<int>(id));
+        }
+        std::vector<float> marker_offsets_float;
+        marker_offsets_float.reserve(g.marker_offsets.size());
+        for (auto v : g.marker_offsets) {
+            marker_offsets_float.push_back(static_cast<float>(v));
+        }
+
+        // Inject a single identity target so estimator output equals the base marker pose
+        std::vector<TargetPoint> identity_targets = {identityTargetPoint()};
+
+        estimators_[name] = std::make_unique<MultiTagPoseEstimator>(
+            marker_ids_int,
+            marker_offsets_float,
+            identity_targets,
+            tag_size_,
+            camera_matrix_,
+            dist_for_pnp,
+            static_cast<int>(g.base_marker_id));
+    }
 
     camera_info_received_ = true;
     RCLCPP_INFO(this->get_logger(), "Camera info received");
@@ -252,8 +313,12 @@ void PoseEstimatorNode::cameraInfoCallback(const sensor_msgs::msg::CameraInfo::S
                 camera_matrix_.at<double>(0, 0), camera_matrix_.at<double>(1, 1));
     RCLCPP_INFO(this->get_logger(), "  cx: %.2f, cy: %.2f",
                 camera_matrix_.at<double>(0, 2), camera_matrix_.at<double>(1, 2));
+    RCLCPP_INFO(this->get_logger(), "  Estimators created: %zu", estimators_.size());
 }
 
+// ========================================================================
+// Image Callback
+// ========================================================================
 void PoseEstimatorNode::imageCallback(const sensor_msgs::msg::Image::SharedPtr msg) {
     if (!camera_info_received_) {
         RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
@@ -273,92 +338,129 @@ void PoseEstimatorNode::imageCallback(const sensor_msgs::msg::Image::SharedPtr m
     cv::Mat cv_image  = cv_ptr->image;
     cv::Mat vis_image = cv_image.clone();
 
-    // Detect AprilTags
-    std::vector<TagDetection> tags = detector_->detect(cv_image, camera_matrix_, dist_coeffs_);
+    // ---------- Detect AprilTags (single pass, group-agnostic) ----------
+    std::vector<TagDetection> all_tags = detector_->detect(cv_image, camera_matrix_, dist_coeffs_);
 
-    if (tags.empty()) {
-        if (detection_active_) {
-            RCLCPP_WARN(this->get_logger(), "No AprilTags detected");
-            detection_active_ = false;
-            last_detected_ids_.clear();
-            {
-                std::lock_guard<std::mutex> lock(detection_mutex_);
-                latest_tag_detected_ = false;
-                latest_rvec_         = cv::Mat::zeros(3, 1, CV_64F);
-                latest_tvec_         = cv::Mat::zeros(3, 1, CV_64F);
-                latest_vis_image_    = cv::Mat();
-                latest_transforms_.clear();
-            }
-            publishTagDetection();
-        }
-        return;
-    }
-
-    // Log detected tag IDs only when they change
+    // Log detected IDs only when changed
     std::vector<int> detected_ids;
-    for (const auto& tag : tags) {
+    detected_ids.reserve(all_tags.size());
+    for (const auto& tag : all_tags) {
         detected_ids.push_back(tag.id);
     }
     std::sort(detected_ids.begin(), detected_ids.end());
-
     if (detected_ids != last_detected_ids_) {
-        std::string ids_str;
+        std::ostringstream ids_ss;
         for (size_t i = 0; i < detected_ids.size(); i++) {
-            ids_str += std::to_string(detected_ids[i]);
-            if (i < detected_ids.size() - 1)
-                ids_str += ", ";
+            if (i)
+                ids_ss << ", ";
+            ids_ss << detected_ids[i];
         }
-        RCLCPP_INFO(this->get_logger(), "Detected %zu tags: [%s]", detected_ids.size(), ids_str.c_str());
+        RCLCPP_INFO(this->get_logger(), "Detected %zu tags: [%s]",
+                    detected_ids.size(), ids_ss.str().c_str());
         last_detected_ids_ = detected_ids;
     }
 
-    // Estimate poses using multi-tag estimator
-    std::vector<Eigen::Matrix4f> target_point_transforms;
-    cv::Mat                      rvec = cv::Mat::zeros(3, 1, CV_64F);
-    cv::Mat                      tvec = cv::Mat::zeros(3, 1, CV_64F);
+    // ---------- Per-group estimate ----------
+    geometry_msgs::msg::PoseArray pose_array_msg;
+    pose_array_msg.header.stamp    = msg->header.stamp;
+    pose_array_msg.header.frame_id = camera_frame_;
 
-    bool success = estimator_->estimate(tags, vis_image, rvec, tvec, target_point_transforms);
+    std_msgs::msg::UInt8MultiArray status_msg;
+    status_msg.data.reserve(group_names_.size());
 
-    if (!success) {
-        if (detection_active_) {
-            RCLCPP_WARN(this->get_logger(), "Pose estimation failed - not all required markers detected");
-            detection_active_ = false;
-            last_detected_ids_.clear();
-            {
-                std::lock_guard<std::mutex> lock(detection_mutex_);
-                latest_tag_detected_ = false;
-                latest_rvec_         = cv::Mat::zeros(3, 1, CV_64F);
-                latest_tvec_         = cv::Mat::zeros(3, 1, CV_64F);
-                latest_vis_image_    = cv::Mat();
-                latest_transforms_.clear();
-            }
-            publishTagDetection();
-        }
-        return;
-    }
-
-    detection_active_ = true;
-
-    // Store latest detection results for service response
     {
         std::lock_guard<std::mutex> lock(detection_mutex_);
-        latest_tag_detected_ = true;
-        latest_rvec_         = rvec;
-        latest_tvec_         = tvec;
-        latest_vis_image_    = vis_image.clone();
-        latest_transforms_   = target_point_transforms;
-        latest_timestamp_    = msg->header.stamp;
+
+        for (const auto& name : group_names_) {
+            const auto& cfg     = group_configs_.at(name);
+            auto&       est     = estimators_.at(name);
+            auto&       last_v  = latest_valid_per_group_[name];
+            auto&       last_r  = latest_rvec_per_group_[name];
+            auto&       last_t  = latest_tvec_per_group_[name];
+            auto&       last_xf = latest_transforms_per_group_[name];
+
+            // Filter detected tags by this group's marker_ids
+            std::vector<TagDetection> group_tags;
+            group_tags.reserve(cfg.marker_ids.size());
+            for (const auto& tag : all_tags) {
+                for (auto id : cfg.marker_ids) {
+                    if (tag.id == static_cast<int>(id)) {
+                        group_tags.push_back(tag);
+                        break;
+                    }
+                }
+            }
+
+            // Estimate for this group
+            std::vector<Eigen::Matrix4f> transforms;
+            cv::Mat                      rvec = cv::Mat::zeros(3, 1, CV_64F);
+            cv::Mat                      tvec = cv::Mat::zeros(3, 1, CV_64F);
+            const bool                   ok   = !group_tags.empty()
+                                                    ? est->estimate(group_tags, vis_image, rvec, tvec, transforms)
+                                                    : false;
+
+            if (ok) {
+                last_v  = true;
+                last_r  = rvec;
+                last_t  = tvec;
+                last_xf = transforms;
+                for (const auto& xf : transforms) {
+                    pose_array_msg.poses.push_back(matrixToPose(xf));
+                }
+                status_msg.data.push_back(1);
+            } else {
+                last_v = false;
+                last_xf.clear();
+                // Fill single NaN pose (one per group → base marker pose)
+                pose_array_msg.poses.push_back(nanPose());
+                status_msg.data.push_back(0);
+            }
+        }
+
+        // Cache vis_image for service result window (after all-group overlays)
+        latest_vis_image_ = vis_image.clone();
+        latest_timestamp_ = msg->header.stamp;
     }
 
-    // Publish tag detection info (dist_coeffs, rvec, tvec, tag_size)
-    publishTagDetection();
+    // ---------- Publish ----------
+    target_poses_pub_->publish(pose_array_msg);
+    group_status_pub_->publish(status_msg);
+
+    if (publish_detection_image_) {
+        // Single vis_image with all-group overlays. Skip encoding when no subscriber.
+        if (detection_image_pub_->get_subscription_count() > 0) {
+            std_msgs::msg::Header header;
+            header.stamp    = msg->header.stamp;
+            header.frame_id = camera_frame_;
+            auto img_msg    = cv_bridge::CvImage(header, "bgr8", vis_image).toImageMsg();
+            detection_image_pub_->publish(*img_msg);
+        }
+    }
+
+    // tag_detection uses first group's rvec/tvec (debug only in multi-group mode)
+    publishTagDetection(group_names_.front());
 }
 
-// Service callback for getting target poses
+// ========================================================================
+// Service Callback
+// ========================================================================
 void PoseEstimatorNode::targetPointPoseServiceCallback(
     std::shared_ptr<apriltag_pose_estimator_msgs::srv::TargetPointPose::Request>  request,
     std::shared_ptr<apriltag_pose_estimator_msgs::srv::TargetPointPose::Response> response) {
     std::lock_guard<std::mutex> lock(detection_mutex_);
+
+    // Group dispatch: empty group_name → first group in group_names
+    std::string group = request->group_name;
+    if (group.empty()) {
+        group = group_names_.front();
+    }
+    auto cfg_it = group_configs_.find(group);
+    if (cfg_it == group_configs_.end()) {
+        response->success = false;
+        response->message = "Unknown group_name: '" + group + "'";
+        RCLCPP_WARN(this->get_logger(), "Service: unknown group '%s'", group.c_str());
+        return;
+    }
 
     if (show_service_result_window_ && !latest_vis_image_.empty()) {
         const char* display_env         = std::getenv("DISPLAY");
@@ -368,32 +470,28 @@ void PoseEstimatorNode::targetPointPoseServiceCallback(
             (wayland_display_env != nullptr && wayland_display_env[0] != '\0');
 
         if (!has_gui_session) {
-            RCLCPP_WARN_THROTTLE(
-                this->get_logger(),
-                *this->get_clock(),
-                5000,
-                "show_service_result_window=true but no GUI session found (DISPLAY/WAYLAND_DISPLAY). "
-                "Skipping result window.");
+            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
+                                 "show_service_result_window=true but no GUI session.");
         } else {
             try {
-                cv::Mat display_image = latest_vis_image_.clone();
+                cv::Mat        display_image = latest_vis_image_.clone();
+                const cv::Mat& rvec_ref      = latest_rvec_per_group_[group];
+                const cv::Mat& tvec_ref      = latest_tvec_per_group_[group];
 
-                // Draw tvec (tx, ty, tz)
                 int                        txt_y    = 40;
                 std::array<std::string, 3> t_labels = {"tx", "ty", "tz"};
                 for (int i = 0; i < 3; i++) {
                     char buf[64];
                     std::snprintf(buf, sizeof(buf), "%s: %.4f m", t_labels[i].c_str(),
-                                  latest_tvec_.at<double>(i));
+                                  tvec_ref.at<double>(i));
                     cv::putText(display_image, buf, cv::Point(20, txt_y),
                                 cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255, 255, 255), 2,
                                 cv::LINE_AA);
                     txt_y += 30;
                 }
 
-                // Convert rvec to roll, pitch, yaw (degrees)
                 cv::Mat rot_mat;
-                cv::Rodrigues(latest_rvec_, rot_mat);
+                cv::Rodrigues(rvec_ref, rot_mat);
                 double sy    = std::sqrt(rot_mat.at<double>(0, 0) * rot_mat.at<double>(0, 0) +
                                          rot_mat.at<double>(1, 0) * rot_mat.at<double>(1, 0));
                 double roll  = std::atan2(rot_mat.at<double>(2, 1), rot_mat.at<double>(2, 2));
@@ -422,21 +520,18 @@ void PoseEstimatorNode::targetPointPoseServiceCallback(
                 }
                 cv::waitKey(1);
             } catch (const cv::Exception& e) {
-                RCLCPP_WARN_THROTTLE(
-                    this->get_logger(),
-                    *this->get_clock(),
-                    5000,
-                    "Failed to show service result window: %s",
-                    e.what());
+                RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
+                                     "Failed to show service result window: %s", e.what());
             }
         }
     }
 
-    // No poses available
-    if (latest_transforms_.empty()) {
+    const auto& transforms = latest_transforms_per_group_[group];
+    if (!latest_valid_per_group_[group] || transforms.empty()) {
         response->success = false;
-        response->message = "No recent valid target point poses available";
-        RCLCPP_WARN(this->get_logger(), "Service called but no recent valid target poses are available");
+        response->message = "No recent valid target poses for group '" + group + "'";
+        RCLCPP_WARN(this->get_logger(),
+                    "Service: no recent valid poses for group '%s'", group.c_str());
         return;
     }
 
@@ -444,83 +539,71 @@ void PoseEstimatorNode::targetPointPoseServiceCallback(
     if (latest_timestamp_ < request->request_time) {
         response->success = false;
         response->message = "No detection newer than request_time";
-        RCLCPP_WARN(
-            this->get_logger(),
-            "Service rejected: request_time=%.9d, latest_detection=%.9f",
-            request->request_time.sec,
-            latest_timestamp_.seconds());
         return;
     }
 
-    // Fill response with latest poses
     response->data_time             = latest_timestamp_;
     response->poses.header.stamp    = latest_timestamp_;
     response->poses.header.frame_id = camera_frame_;
-
-    for (const auto& transform : latest_transforms_) {
-        response->poses.poses.push_back(matrixToPose(transform));
+    for (const auto& xf : transforms) {
+        response->poses.poses.push_back(matrixToPose(xf));
     }
-
     response->success = true;
-    response->message = "Target point pose retrieved successfully";
+    response->message = "Target point pose retrieved successfully (group='" + group + "')";
 
-    RCLCPP_INFO(this->get_logger(), "✅ Service: Returned %zu target poses",
-                latest_transforms_.size());
+    RCLCPP_INFO(this->get_logger(), "Service: returned %zu poses for group '%s'",
+                transforms.size(), group.c_str());
 }
 
 // ========================================================================
-// Publishing Functions
+// publishTagDetection (uses reference_group's rvec/tvec; debug only)
 // ========================================================================
-void PoseEstimatorNode::publishTagDetection() {
+void PoseEstimatorNode::publishTagDetection(const std::string& reference_group) {
     apriltag_pose_estimator_msgs::msg::TagDetection detection_msg;
 
-    detection_msg.tag_detected = latest_tag_detected_;
+    const bool  valid    = latest_valid_per_group_[reference_group];
+    const auto& rvec_ref = latest_rvec_per_group_[reference_group];
+    const auto& tvec_ref = latest_tvec_per_group_[reference_group];
+
+    detection_msg.tag_detected = valid;
     detection_msg.tag_size     = tag_size_;
 
-    // -------- camera matrix (3x3) --------
     for (int r = 0; r < 3; r++) {
         for (int c = 0; c < 3; c++) {
-            detection_msg.camera_matrix[r * 3 + c] =
-                camera_matrix_.at<double>(r, c);
+            detection_msg.camera_matrix[r * 3 + c] = camera_matrix_.at<double>(r, c);
         }
     }
-
-    // -------- distortion coefficients --------
     detection_msg.dist_coeffs.resize(dist_coeffs_.rows);
     for (int i = 0; i < dist_coeffs_.rows; i++) {
         detection_msg.dist_coeffs[i] = dist_coeffs_.at<double>(i, 0);
     }
-
-    // -------- rvec / tvec --------
     for (int i = 0; i < 3; i++) {
-        detection_msg.rvec[i] = latest_rvec_.at<double>(i);
-        detection_msg.tvec[i] = latest_tvec_.at<double>(i);
+        detection_msg.rvec[i] = rvec_ref.at<double>(i);
+        detection_msg.tvec[i] = tvec_ref.at<double>(i);
     }
 
     tag_detection_pub_->publish(detection_msg);
 }
 
 // ========================================================================
-// Utility Functions
+// Utility
 // ========================================================================
 geometry_msgs::msg::Pose PoseEstimatorNode::matrixToPose(const Eigen::Matrix4f& matrix) {
     geometry_msgs::msg::Pose pose;
-
-    // Extract translation
-    pose.position.x = matrix(0, 3);
-    pose.position.y = matrix(1, 3);
-    pose.position.z = matrix(2, 3);
-
-    // Extract rotation and convert to quaternion
+    pose.position.x             = matrix(0, 3);
+    pose.position.y             = matrix(1, 3);
+    pose.position.z             = matrix(2, 3);
     Eigen::Matrix3f    rotation = matrix.block<3, 3>(0, 0);
     Eigen::Quaternionf quat(rotation);
-
     pose.orientation.x = quat.x();
     pose.orientation.y = quat.y();
     pose.orientation.z = quat.z();
     pose.orientation.w = quat.w();
-
     return pose;
+}
+
+geometry_msgs::msg::Pose PoseEstimatorNode::makeNanPose() {
+    return nanPose();
 }
 
 }  // namespace apriltag_pose_estimator
