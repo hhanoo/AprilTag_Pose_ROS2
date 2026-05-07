@@ -690,7 +690,7 @@ builtin_interfaces/Time data_time       # 데이터 타임스탬프
 geometry_msgs/PoseArray poses           # 해당 그룹의 base marker pose (요소 1개)
 ```
 
-> `group_name` 필드는 multi-group 지원을 위해 추가됨. 빈 문자열은 첫 그룹(legacy 모드에선 `default`)을 가리켜 후방 호환. 알 수 없는 그룹 이름은 service error.
+> `group_name`이 빈 문자열이면 `group_names`의 첫 그룹을 가리킴. 알 수 없는 그룹 이름은 service error.
 
 ### 네트워크 구성 (Docker)
 
