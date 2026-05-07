@@ -116,14 +116,16 @@ def _node_from_service(service_name: str) -> str:
     return parts[0] if parts else ""
 
 
-def _print_node_config(params: dict) -> None:
-    """Pretty-print the relevant subset of pose_estimator_node parameters."""
+def _print_node_config(params: dict, group_name: str, group_names: list) -> None:
+    """Pretty-print the relevant subset of pose_estimator_node parameters (multi-group)."""
     print()
     print("node configuration:")
-    print(f"  marker_ids     : {params.get('marker_ids')}")
-    print(f"  base_marker_id : {params.get('base_marker_id')}")
+    print(f"  group_names    : {group_names}")
+    print(f"  group          : {group_name}")
     print(f"  tag_size       : {params.get('tag_size')} m")
     print(f"  tag_family     : {params.get('tag_family')}")
+    print(f"  marker_ids     : {params.get('marker_ids')}")
+    print(f"  base_marker_id : {params.get('base_marker_id')}")
     offsets = params.get("marker_offsets")
     ids = params.get("marker_ids") or []
     if offsets is not None and len(ids) > 0 and len(offsets) == len(ids) * 6:
@@ -250,24 +252,44 @@ def main() -> None:
     rclpy.init()
     probe = JitterProbe(args.service, group_name=args.group)
 
-    # ---------- Query node parameters (best-effort) ----------
+    # ---------- Query node parameters (best-effort, multi-group) ----------
     if not args.no_params:
         target_node = args.node or _node_from_service(args.service)
-        params = probe.fetch_params(
-            target_node,
-            [
-                "marker_ids",
-                "base_marker_id",
-                "tag_size",
-                "tag_family",
-                "marker_offsets",
-            ],
+        # Step 1: get group_names + common params
+        common = probe.fetch_params(
+            target_node, ["group_names", "tag_size", "tag_family"]
         )
-        if params is None:
+        if common is None:
             print(f"warning: could not fetch parameters from /{target_node}")
         else:
+            group_names = common.get("group_names") or []
+            # Resolve target group: --group if given, else first group
+            target_group = (
+                args.group if args.group else (group_names[0] if group_names else "")
+            )
+            # Step 2: fetch group-scoped params using dotted-name
+            group_params = {}
+            if target_group:
+                prefix = f"groups.{target_group}."
+                group_params = (
+                    probe.fetch_params(
+                        target_node,
+                        [
+                            prefix + "marker_ids",
+                            prefix + "base_marker_id",
+                            prefix + "marker_offsets",
+                        ],
+                    )
+                    or {}
+                )
+                # Strip prefix for display
+                group_params = {k[len(prefix) :]: v for k, v in group_params.items()}
             print(f"queried node : /{target_node}")
-            _print_node_config(params)
+            _print_node_config(
+                {**common, **group_params},
+                target_group,
+                group_names,
+            )
 
     xs, ys, zs = [], [], []
     rolls, pitches, yaws = [], [], []
