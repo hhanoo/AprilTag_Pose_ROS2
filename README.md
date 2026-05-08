@@ -467,7 +467,7 @@ ros2 run rqt_image_view rqt_image_view
 ```bash
 ros2 service call /pose_estimator_node/target_point_pose \
   apriltag_pose_estimator_msgs/srv/TargetPointPose \
-  "{request_time: {sec: 0, nanosec: 0}}"
+  "{request_time: {sec: 0, nanosec: 0}, group_name: ''}"
 ```
 
 #### 5. 서비스 응답 지터 측정 (선택)
@@ -477,7 +477,7 @@ ros2 service call /pose_estimator_node/target_point_pose \
 **기본 실행**
 
 ```bash
-# 100회 호출, 0.1초 간격, target point 0번 추적
+# 100회 호출, 0.1초 간격, default 그룹 추적
 python3 ros2_ws/src/apriltag_pose_estimator/scripts/jitter_probe.py
 ```
 
@@ -754,7 +754,7 @@ sudo usermod -aG plugdev $USER
 # 3. 해상도를 높이거나 프레임 레이트를 낮춰서 이미지 품질 개선
 #    (사용 카메라 ROS2 드라이버 launch에서 해상도/FPS 옵션을 조정)
 
-# 4. scripts/jitter_probe.py 로 정량 측정 (사용법 섹션 6번 참고)
+# 4. scripts/jitter_probe.py 로 정량 측정 (사용법 섹션 5번 참고)
 python3 ros2_ws/src/apriltag_pose_estimator/scripts/jitter_probe.py
 ```
 
