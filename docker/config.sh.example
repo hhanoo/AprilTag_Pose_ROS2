@@ -6,4 +6,9 @@ IMAGE_NAME="hhanoo/project:apriltag-pose-ros2-humble"
 # Docker container name (used in run.sh)
 CONTAINER_NAME="apriltag-pose-ros2-humble"
 
-ROS_DOMAIN_ID="98"
+# ROS 2 domain ID for network isolation (used in run.sh)
+ROS_DOMAIN_ID=""
+
+# X11 .Xauthority path on host (used in run.sh)
+# - Mounted into container as /root/.Xauthority for Qt GUI / RViz display.
+XAUTHORITY_PATH="$HOME/.Xauthority"

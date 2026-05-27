@@ -165,7 +165,7 @@ AprilTag_Pose_ROS2/
 │   ├── build.sh
 │   ├── run.sh
 │   ├── entrypoint.sh
-│   ├── aliases.sh
+│   ├── commands.sh
 │   └── config.sh.example
 └── docs/
     └── launch_ros_graph.png
@@ -191,7 +191,7 @@ colcon build
 
 # 4. 실행 (터미널 2개)
 ros2 launch <your_camera_driver> ...   # 사용 카메라 ROS2 드라이버
-run_est                                # ros2 launch apriltag_pose_estimator apriltag_estimator.launch.py
+run-estimator                          # ros2 launch apriltag_pose_estimator apriltag_estimator.launch.py
 ```
 
 ### Option 2: Native
@@ -399,6 +399,9 @@ ros2 launch apriltag_pose_estimator apriltag_estimator.launch.py \
 
 ### Docker 실행
 
+> **권장**: 직접 `docker exec`로 컨테이너에 진입하지 말고 항상 [run.sh](docker/run.sh)를 사용하세요.  
+> `run.sh`는 도커 이미지 확인 · X11 권한 · 마운트 · 호스트 권한 복원(`HOST_UID`/`HOST_GID`) · 기존 컨테이너 재사용을 한 번에 처리합니다.
+
 ```bash
 docker pull hhanoo/project:apriltag-pose-ros2-humble
 cd docker
@@ -410,17 +413,18 @@ colcon build && source install/setup.bash
 ros2 launch <your_camera_driver> ...
 ```
 
-전체 alias 정의는 [aliases.sh](docker/aliases.sh)를 참고하세요.
+전체 command 정의는 [commands.sh](docker/commands.sh)를 참고하세요.
 
-| Alias       | 설명                   | 참고                                                                                                 |
-| ----------- | ---------------------- | ---------------------------------------------------------------------------------------------------- |
-| `run_est`   | 포즈 추정기 실행       | [apriltag_estimator.launch.py](apriltag_pose_estimator/launch/apriltag_estimator.launch.py)          |
-| `run_viz`   | 시각화 노드 실행       | [pose_visualizer_node.py](apriltag_pose_visualizer/apriltag_pose_visualizer/pose_visualizer_node.py) |
-| `echo_pose` | 포즈 토픽 모니터링     | --                                                                                                   |
-| `call_pose` | 포즈 서비스 호출       | [TargetPointPose.srv](apriltag_pose_estimator_msgs/srv/TargetPointPose.srv)                          |
-| `cmd_help`  | 사용 가능한 alias 목록 | 컨테이너 접속 시 자동 출력                                                                           |
+| Command          | 설명                     | 참고                                                                                                 |
+| ---------------- | ------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `build`          | 워크스페이스 빌드        | colcon build --symlink-install + overlay 자동 source                                                 |
+| `run-estimator`  | 포즈 추정기 실행         | [apriltag_estimator.launch.py](apriltag_pose_estimator/launch/apriltag_estimator.launch.py)          |
+| `run-visualizer` | 시각화 노드 실행         | [pose_visualizer_node.py](apriltag_pose_visualizer/apriltag_pose_visualizer/pose_visualizer_node.py) |
+| `echo-pose`      | 포즈 토픽 모니터링       | --                                                                                                   |
+| `call-pose`      | 포즈 서비스 호출         | [TargetPointPose.srv](apriltag_pose_estimator_msgs/srv/TargetPointPose.srv)                          |
+| `cmd-help`       | 사용 가능한 command 목록 | 컨테이너 접속 시 자동 출력                                                                           |
 
-> 카메라 드라이버 launch는 alias로 제공하지 않습니다. 사용 환경에 맞는 ROS2 카메라 드라이버를 직접 실행하세요.
+> 카메라 드라이버 launch는 command로 제공하지 않습니다. 사용 환경에 맞는 ROS2 카메라 드라이버를 직접 실행하세요.
 
 ---
 
@@ -539,7 +543,9 @@ orientation (deg):
 
 ```bash
 IMAGE_NAME="hhanoo/project:apriltag-pose-ros2-humble"  # Docker Hub 이미지 (기본값)
-CONTAINER_NAME="apriltag-pose-ros2-humble"              # Docker 컨테이너 이름
+CONTAINER_NAME="apriltag-pose-ros2-humble"             # Docker 컨테이너 이름
+ROS_DOMAIN_ID=                                         # ROS2 도메인 ID
+XAUTHORITY_PATH="$HOME/.Xauthority"                    # X11 .Xauthority 경로 (GUI/RViz 표시용)
 ```
 
 > `run.sh` 실행 전 `docker pull hhanoo/project:apriltag-pose-ros2-humble`로 이미지를 가져오세요.

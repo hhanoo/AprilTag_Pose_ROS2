@@ -1,14 +1,24 @@
 #!/bin/bash
 set -e
 
-# Source ROS2 environment
-if [ -f /opt/ros/humble/setup.bash ]; then
-    source /opt/ros/humble/setup.bash
+# ===== Workspace =====
+WORKSPACE="/ros2_ws"
+
+# ===== Functions =====
+restore_ownership() {
+    # Restore host file ownership
+    if [ -n "$HOST_UID" ] && [ -n "$HOST_GID" ] && [ -d "$WORKSPACE" ]; then
+        chown -R "$HOST_UID:$HOST_GID" "$WORKSPACE"
+    fi
+}
+
+# ===== Trap =====
+trap restore_ownership EXIT
+
+# ===== Default Command =====
+if [ "$#" -eq 0 ]; then
+    set -- /bin/bash
 fi
 
-# Source workspace if built
-if [ -f /ros2_ws/install/setup.bash ]; then
-    source /ros2_ws/install/setup.bash
-fi
-
-exec "$@"
+# ===== Execute Command =====
+"$@"
