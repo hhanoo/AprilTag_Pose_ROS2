@@ -45,6 +45,12 @@ class MultiTagPoseEstimator {
         const cv::Mat& tvec   // Translation vector
     );
 
+    // Reset stale state (last pose cache + filter)
+    void resetStaleState();
+
+    // Count a failure; reset stale state after too many
+    void registerMiss();
+
     // ========================================================================
     // Member Variables
     // ========================================================================
@@ -61,6 +67,10 @@ class MultiTagPoseEstimator {
     cv::Mat last_rvec_;                    // Last valid rotation vector
     cv::Mat last_tvec_;                    // Last valid translation vector
     double  max_reproj_error_ = 15.0;      // Maximum reprojection error threshold (pixel units)
+    int     reuse_count_      = 0;         // Consecutive frames the last pose was reused
+    int     max_pose_reuse_   = 5;         // Max consecutive reuses before failing
+    int     miss_count_       = 0;         // Consecutive estimate failures
+    int     max_miss_reset_   = 5;         // Consecutive failures that trigger a reset
 
     // Quaternion SLERP EMA filter
     PoseFilter pose_filter_;

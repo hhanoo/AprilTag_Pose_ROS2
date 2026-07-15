@@ -94,6 +94,7 @@ bool MultiTagPoseEstimator::estimate(
     // 2. Check if all required marker IDs are found in the detected tags
     for (int marker_id : marker_ids_) {
         if (tag_dict.find(marker_id) == tag_dict.end()) {
+            registerMiss();
             return false;  // Not all required markers detected
         }
     }
@@ -134,9 +135,11 @@ bool MultiTagPoseEstimator::estimate(
     }
 
     // 5. Estimate camera pose using solvePnP (Using SOLVEPNP_ITERATIVE)
-    bool success = cv::solvePnP(pt3D, pt2D, camera_matrix_, dist_coeffs_, rvec, tvec);
+    bool success     = cv::solvePnP(pt3D, pt2D, camera_matrix_, dist_coeffs_, rvec, tvec);
+    bool reused_pose = false;  // True if last pose is reused
 
     if (!success) {
+        registerMiss();
         return false;  // Pose estimation failed
     }
 
@@ -157,18 +160,22 @@ bool MultiTagPoseEstimator::estimate(
         }
         double meanReprojErr = totalErr / pt2D.size();
 
-        // 6.3 Outlier Rejection
+        // 6.3 Outlier Rejection (reuse last pose up to max_pose_reuse_ frames)
         if (meanReprojErr > max_reproj_error_) {
-            if (has_last_valid_pose_) {
-                rvec = last_rvec_.clone();
-                tvec = last_tvec_.clone();
+            if (has_last_valid_pose_ && reuse_count_ < max_pose_reuse_) {
+                rvec        = last_rvec_.clone();
+                tvec        = last_tvec_.clone();
+                reused_pose = true;
+                reuse_count_++;
             } else {
+                resetStaleState();
                 return false;
             }
         } else {
             last_rvec_           = rvec.clone();
             last_tvec_           = tvec.clone();
             has_last_valid_pose_ = true;
+            reuse_count_         = 0;
         }
     }
 
@@ -191,10 +198,27 @@ bool MultiTagPoseEstimator::estimate(
     // 8. Output: filtered base marker pose (camera frame)
     base_transform_out = T_cam_2_marker_filtered;
 
-    // 9. Visualize the base marker pose using axes
-    cv::drawFrameAxes(img, camera_matrix_, dist_coeffs_, rvec, tvec, tag_size_);
+    // 9. Visualize the base marker pose using axes (skip reused poses)
+    if (!reused_pose) {
+        cv::drawFrameAxes(img, camera_matrix_, dist_coeffs_, rvec, tvec, tag_size_);
+    }
 
+    miss_count_ = 0;
     return true;
+}
+
+void MultiTagPoseEstimator::resetStaleState() {
+    has_last_valid_pose_ = false;
+    reuse_count_         = 0;
+    pose_filter_.reset();
+}
+
+void MultiTagPoseEstimator::registerMiss() {
+    miss_count_++;
+    // Reset filter/cache after a long detection gap
+    if (miss_count_ >= max_miss_reset_) {
+        resetStaleState();
+    }
 }
 
 // ========================================================================
