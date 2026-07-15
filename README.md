@@ -70,8 +70,8 @@ AprilTag Pose ROS2는 ROS2 호환 RGB 카메라와 AprilTag 마커를 활용하�
 ## 주요 기능
 
 - **다중 마커 PnP 융합**: 복수의 AprilTag 코너를 동시에 활용하여 단일 마커 대비 향상된 6-DOF 포즈 추정
-- **SLERP 쿼터니언 필터**: Gimbal lock 없는 회전 보간과 적응형 EMA로 프레임 간 지터 억제
-- **Reprojection Error 기반 이상치 제거**: 15픽셀 임계값으로 불량 검출 자동 필터링
+- **SLERP 쿼터니언 필터**: Gimbal lock 없는 회전 보간과 적응형 EMA로 프레임 간 지터 억제 (연속 5프레임 미검출 시 자동 리셋되어 재등장 시 옛 pose와 블렌딩 방지)
+- **Reprojection Error 기반 이상치 제거**: 15픽셀 임계값으로 불량 검출 자동 필터링 (이전 유효 pose 재사용은 연속 5프레임으로 제한, 재사용 pose는 축 시각화 제외)
 - **고성능 C++ 파이프라인**: 실시간 처리에 적합한 네이티브 구현 (5-8ms/frame @ 1280x720)
 - **Multi-Group 동시 추정**: 한 카메라 프레임에서 여러 마커 그룹의 base pose를 동시에 publish (그룹별 독립 SLERP 필터)
 - **YAML 기반 유연한 설정**: 마커 ID, 크기, 그룹별 오프셋을 설정 파일로 관리
