@@ -127,40 +127,41 @@ AprilTag Pose ROS2는 ROS2 호환 RGB 카메라와 AprilTag 마커를 활용하�
 
 ```
 AprilTag_Pose_ROS2/
-├── apriltag_pose_estimator/                # 포즈 추정 패키지 (C++)
+├── apriltag_pose_estimator/                    # 포즈 추정 패키지 (C++)
 │   ├── src/
-│   │   ├── pose_estimator_node.cpp         # ROS2 노드 구현
-│   │   ├── april_tag_detector.cpp          # AprilTag 검출 래퍼
-│   │   ├── multi_tag_pose_estimator.cpp    # 다중 마커 PnP 융합
-│   │   ├── slerp_pose_filter.cpp           # 쿼터니언 SLERP 필터
-│   │   └── main.cpp                        # 엔트리 포인트
+│   │   ├── pose_estimator_node.cpp             # ROS2 노드 구현
+│   │   ├── april_tag_detector.cpp              # AprilTag 검출 래퍼
+│   │   ├── multi_tag_pose_estimator.cpp        # 다중 마커 PnP 융합
+│   │   ├── slerp_pose_filter.cpp               # 쿼터니언 SLERP 필터
+│   │   └── main.cpp                            # 엔트리 포인트
 │   ├── include/apriltag_pose_estimator/
 │   │   ├── pose_estimator_node.hpp
 │   │   ├── april_tag_detector.hpp
 │   │   ├── multi_tag_pose_estimator.hpp
 │   │   ├── slerp_pose_filter.hpp
-│   │   └── tag_config.hpp                  # 데이터 구조 정의
+│   │   └── tag_config.hpp                      # 데이터 구조 정의
 │   ├── config/
-│   │   └── pose_estimator.yaml             # 설정 파일
+│   │   └── pose_estimator.yaml                 # 설정 파일
 │   ├── launch/
-│   │   └── apriltag_estimator.launch.py    # 런치 파일
+│   │   └── apriltag_estimator.launch.py        # 런치 파일
 │   ├── scripts/
-│   │   └── jitter_probe.py                 # 서비스 응답 지터 측정 스크립트
+│   │   └── jitter_probe.py                     # 서비스 응답 지터 측정 스크립트
 │   ├── CMakeLists.txt
 │   └── package.xml
-├── apriltag_pose_estimator_msgs/           # 커스텀 인터페이스
+├── apriltag_pose_estimator_msgs/               # 커스텀 인터페이스
 │   ├── msg/
 │   │   └── TagDetection.msg
 │   ├── srv/
 │   │   └── TargetPointPose.srv
 │   ├── CMakeLists.txt
 │   └── package.xml
-├── apriltag_pose_visualizer/               # 시각화 패키지 (Python)
+├── apriltag_pose_visualizer/                   # 시각화 패키지 (Python)
 │   ├── apriltag_pose_visualizer/
 │   │   └── pose_visualizer_node.py
 │   ├── setup.py
 │   └── package.xml
-├── docker/                                 # Docker 환경
+├── realsense-ros/                              # RealSense ROS2 드라이버 (외부 저장소, git 미추적)
+├── docker/                                     # Docker 환경
 │   ├── Dockerfile
 │   ├── build.sh
 │   ├── run.sh
@@ -185,12 +186,12 @@ docker pull hhanoo/project:apriltag-pose-ros2-humble
 cd AprilTag_Pose_ROS2/docker
 ./run.sh
 
-# 3. 컨테이너 내부에서 빌드 (사용 카메라 ROS2 드라이버는 사전에 컨테이너에 포함되어 있어야 함)
+# 3. 컨테이너 내부에서 빌드 (RealSense 드라이버는 워크스페이스에 포함되어 있음)
 cd /ros2_ws
 colcon build
 
 # 4. 실행 (터미널 2개)
-ros2 launch <your_camera_driver> ...   # 사용 카메라 ROS2 드라이버
+ros2 launch <your_camera_driver> ...   # 사용 카메라 ROS2 드라이버 (RealSense는 미리 정의된 run-camera 사용)
 run-estimator                          # ros2 launch apriltag_pose_estimator apriltag_estimator.launch.py
 ```
 
@@ -410,7 +411,7 @@ cd docker
 # 컨테이너 내부
 cd /ros2_ws
 colcon build && source install/setup.bash
-ros2 launch <your_camera_driver> ...
+ros2 launch <your_camera_driver> ...   # 사용 카메라 ROS2 드라이버 (RealSense는 run-camera 사용)
 ```
 
 전체 command 정의는 [commands.sh](docker/commands.sh)를 참고하세요.
@@ -418,13 +419,15 @@ ros2 launch <your_camera_driver> ...
 | Command          | 설명                     | 참고                                                                                                 |
 | ---------------- | ------------------------ | ---------------------------------------------------------------------------------------------------- |
 | `build`          | 워크스페이스 빌드        | colcon build --symlink-install + overlay 자동 source                                                 |
+| `run-camera`     | RealSense 카메라 실행    | [rs_launch.py](realsense-ros/realsense2_camera/launch/rs_launch.py) (1280x720x30, depth 비활성)      |
 | `run-estimator`  | 포즈 추정기 실행         | [apriltag_estimator.launch.py](apriltag_pose_estimator/launch/apriltag_estimator.launch.py)          |
 | `run-visualizer` | 시각화 노드 실행         | [pose_visualizer_node.py](apriltag_pose_visualizer/apriltag_pose_visualizer/pose_visualizer_node.py) |
 | `echo-pose`      | 포즈 토픽 모니터링       | --                                                                                                   |
 | `call-pose`      | 포즈 서비스 호출         | [TargetPointPose.srv](apriltag_pose_estimator_msgs/srv/TargetPointPose.srv)                          |
 | `cmd-help`       | 사용 가능한 command 목록 | 컨테이너 접속 시 자동 출력                                                                           |
 
-> 카메라 드라이버 launch는 command로 제공하지 않습니다. 사용 환경에 맞는 ROS2 카메라 드라이버를 직접 실행하세요.
+> `run-camera`는 워크스페이스에 포함된 realsense-ros 기준입니다. 다른 카메라를 쓸 경우 해당 ROS2 드라이버를 직접 실행하세요  
+> (estimator 구독 토픽: `camera/color/image_raw`, `camera/color/camera_info`).
 
 ---
 

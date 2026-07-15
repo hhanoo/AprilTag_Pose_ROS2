@@ -12,7 +12,6 @@ build() {
     cd /ros2_ws || return 1
     colcon build \
         --symlink-install \
-        --event-handlers console_direct+ \
         --cmake-args \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             -DCMAKE_BUILD_TYPE=Release "$@"
@@ -20,6 +19,14 @@ build() {
 }
 
 # ===== Launchers =====
+run-camera() {
+    source-ros-ws
+    ros2 launch realsense2_camera rs_launch.py \
+        camera_namespace:=/ \
+        rgb_camera.color_profile:=1280x720x30 \
+        enable_depth:=false "$@"
+}
+
 run-estimator() {
     source-ros-ws
     ros2 launch apriltag_pose_estimator apriltag_estimator.launch.py "$@"
@@ -51,7 +58,12 @@ cmd-help() {
     printf "    %-14s - %s\n" "build"      "colcon build --symlink-install + source overlay"
     printf "\n"
 
+    printf "  Test:\n"
+    printf "    %-14s - %s\n" "run-tests"  "colcon test (apriltag packages) + result summary"
+    printf "\n"
+
     printf "  Launchers:\n"
+    printf "    %-14s - %s\n" "run-camera"     "realsense2_camera rs_launch.py (1280x720x30, no depth)"
     printf "    %-14s - %s\n" "run-estimator"  "apriltag_pose_estimator launch"
     printf "    %-14s - %s\n" "run-visualizer" "apriltag_pose_visualizer node"
     printf "\n"

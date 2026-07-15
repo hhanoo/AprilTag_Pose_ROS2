@@ -42,3 +42,6 @@ docker/config.sh
 
 # Prettier
 .prettierignore
+
+# vision (external repos, not submodules)
+realsense-ros/

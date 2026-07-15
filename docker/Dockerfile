@@ -111,6 +111,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # =========================================================================
+# RealSense (realsense-ros 소스 빌드용)
+# =========================================================================
+# - librealsense2        : RealSense SDK (realsense2_camera 빌드/실행)
+# - diagnostic-updater   : realsense2_camera 의존성
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-${ROS_DISTRO}-librealsense2 \
+    ros-${ROS_DISTRO}-diagnostic-updater \
+    && rm -rf /var/lib/apt/lists/*
+
+# =========================================================================
 # Runtime Setup
 # =========================================================================
 # - USB device access groups
