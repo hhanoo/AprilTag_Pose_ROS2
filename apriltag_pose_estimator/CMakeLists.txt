@@ -111,8 +111,13 @@ install(DIRECTORY
 # Testing
 # =========================================================
 if(BUILD_TESTING)
-    find_package(ament_lint_auto REQUIRED)
-    ament_lint_auto_find_test_dependencies()
+    find_package(ament_cmake_gtest REQUIRED)
+    ament_add_gtest(test_multi_tag_pose_estimator
+        test/test_multi_tag_pose_estimator.cpp
+    )
+    target_link_libraries(test_multi_tag_pose_estimator
+        ${PROJECT_NAME}_lib
+    )
 endif()
 
 # =========================================================

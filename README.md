@@ -146,6 +146,8 @@ AprilTag_Pose_ROS2/
 │   │   └── apriltag_estimator.launch.py        # 런치 파일
 │   ├── scripts/
 │   │   └── jitter_probe.py                     # 서비스 응답 지터 측정 스크립트
+│   ├── test/
+│   │   └── test_multi_tag_pose_estimator.cpp   # estimator 단위 테스트 (gtest)
 │   ├── CMakeLists.txt
 │   └── package.xml
 ├── apriltag_pose_estimator_msgs/               # 커스텀 인터페이스
@@ -419,6 +421,7 @@ ros2 launch <your_camera_driver> ...   # 사용 카메라 ROS2 드라이버 (Rea
 | Command          | 설명                     | 참고                                                                                                 |
 | ---------------- | ------------------------ | ---------------------------------------------------------------------------------------------------- |
 | `build`          | 워크스페이스 빌드        | colcon build --symlink-install + overlay 자동 source                                                 |
+| `run-tests`      | 단위 테스트 실행         | colcon test (apriltag 패키지) + 결과 요약                                                            |
 | `run-camera`     | RealSense 카메라 실행    | [rs_launch.py](realsense-ros/realsense2_camera/launch/rs_launch.py) (1280x720x30, depth 비활성)      |
 | `run-estimator`  | 포즈 추정기 실행         | [apriltag_estimator.launch.py](apriltag_pose_estimator/launch/apriltag_estimator.launch.py)          |
 | `run-visualizer` | 시각화 노드 실행         | [pose_visualizer_node.py](apriltag_pose_visualizer/apriltag_pose_visualizer/pose_visualizer_node.py) |

@@ -18,6 +18,13 @@ build() {
     source-ros-ws
 }
 
+# ===== Test =====
+run-tests() {
+    cd /ros2_ws || return 1
+    colcon test --packages-select-regex 'apriltag' --event-handlers console_cohesion+ "$@"
+    colcon test-result --verbose
+}
+
 # ===== Launchers =====
 run-camera() {
     source-ros-ws
