@@ -472,16 +472,19 @@ ros2 launch apriltag_pose_estimator apriltag_estimator.launch.py \
 
 전체 command 정의는 [commands.sh](docker/commands.sh)를 참고하세요.
 
-| Command          | 설명                                              | 참고                                                                                                 |
-| ---------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `build`          | 워크스페이스 Release 빌드 후 overlay 자동 source  | `colcon build --symlink-install`                                                                     |
-| `run-tests`      | apriltag 패키지 테스트 실행 후 결과 요약          | [test_multi_tag_pose_estimator.cpp](apriltag_pose_estimator/test/test_multi_tag_pose_estimator.cpp)  |
-| `run-camera`     | RealSense 카메라 실행 (1280x720x30, depth 비활성) | realsense-ros (외부 저장소)                                                                          |
-| `run-estimator`  | 포즈 추정기 실행                                  | [apriltag_estimator.launch.py](apriltag_pose_estimator/launch/apriltag_estimator.launch.py)          |
-| `run-visualizer` | 시각화 노드 실행                                  | [pose_visualizer_node.py](apriltag_pose_visualizer/apriltag_pose_visualizer/pose_visualizer_node.py) |
-| `echo-pose`      | `/pose_estimator_node/target_poses` 모니터링      | —                                                                                                    |
-| `call-pose`      | `/pose_estimator_node/target_point_pose` 호출     | [TargetPointPose.srv](apriltag_pose_estimator_msgs/srv/TargetPointPose.srv)                          |
-| `cmd-help`       | command 목록 출력 (컨테이너 접속 시 자동 실행)    | —                                                                                                    |
+| Command           | 설명                                              | 참고                                                                                                 |
+| ----------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `build`           | 워크스페이스 Release 빌드 후 overlay 자동 source  | `colcon build --symlink-install`                                                                     |
+| `build-debug`     | 디버그 심볼 포함 빌드 (RelWithDebInfo)            | `-DCMAKE_BUILD_TYPE=RelWithDebInfo` 전달                                                             |
+| `run-tests`       | apriltag 패키지 테스트 실행 후 결과 요약          | [test_multi_tag_pose_estimator.cpp](apriltag_pose_estimator/test/test_multi_tag_pose_estimator.cpp)  |
+| `debug-estimator` | gdbserver로 포즈 추정기 실행                      | 포트 `:3000`에 호스트 VSCode로 attach                                                                |
+| `run-camera`      | RealSense 카메라 실행 (1280x720x30, depth 비활성) | realsense-ros (외부 저장소)                                                                          |
+| `run-estimator`   | 포즈 추정기 실행                                  | [apriltag_estimator.launch.py](apriltag_pose_estimator/launch/apriltag_estimator.launch.py)          |
+| `run-visualizer`  | 시각화 노드 실행                                  | [pose_visualizer_node.py](apriltag_pose_visualizer/apriltag_pose_visualizer/pose_visualizer_node.py) |
+| `echo-pose`       | `/pose_estimator_node/target_poses` 모니터링      | —                                                                                                    |
+| `call-pose`       | `/pose_estimator_node/target_point_pose` 호출     | [TargetPointPose.srv](apriltag_pose_estimator_msgs/srv/TargetPointPose.srv)                          |
+| `source-config`   | `config.sh` 재적용                                | `/ros2_ws/docker/config.sh`                                                                          |
+| `cmd-help`        | command 목록 출력 (컨테이너 접속 시 자동 실행)    | —                                                                                                    |
 
 > `docker exec`로 직접 진입하지 말고 [run.sh](docker/run.sh)를 사용할 것.  
 > 이미지 존재 확인, X11 권한, `/dev`·워크스페이스 마운트, `HOST_UID`/`HOST_GID` 기반 소유권 복원, 기존 컨테이너 재사용을 한 번에 처리.

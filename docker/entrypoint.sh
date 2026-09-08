@@ -6,9 +6,9 @@ WORKSPACE="/ros2_ws"
 
 # ===== Functions =====
 restore_ownership() {
-    # Restore host file ownership
+    # Restore host file ownership (ignore errors on mounts that reject chown)
     if [ -n "$HOST_UID" ] && [ -n "$HOST_GID" ] && [ -d "$WORKSPACE" ]; then
-        chown -R "$HOST_UID:$HOST_GID" "$WORKSPACE"
+        chown -R "$HOST_UID:$HOST_GID" "$WORKSPACE" 2>/dev/null || true
     fi
 }
 

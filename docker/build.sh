@@ -11,7 +11,7 @@ source "$SCRIPT_DIR/config.sh"
 
 # Build the Docker image
 echo "Building Docker image: $IMAGE_NAME..."
-docker build -t $IMAGE_NAME -f "$SCRIPT_DIR/Dockerfile" "$SCRIPT_DIR"
+docker build -t "$IMAGE_NAME" -f "$SCRIPT_DIR/Dockerfile" "$SCRIPT_DIR"
 
 # Check if the build was successful
 if [ $? -eq 0 ]; then

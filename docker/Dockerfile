@@ -81,21 +81,11 @@ RUN python3 -m pip install --no-cache-dir \
     PyQt5-sip
 
 # =========================================================================
-# Development Tools
-# =========================================================================
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    bear \
-    clang-format \
-    clangd \
-    && rm -rf /var/lib/apt/lists/*
-
-# =========================================================================
 # C++ Build Dependencies
 # =========================================================================
 # - libeigen3-dev    : apriltag_pose_estimator
 # - libopencv-dev    : apriltag_pose_estimator
 # - libapriltag-dev  : apriltag_pose_estimator
-# - libmodbus-dev    : tool I/O
 # - libusb-1.0-0-dev : USB camera drivers
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
@@ -104,17 +94,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libeigen3-dev \
     libopencv-dev \
     libapriltag-dev \
-    libmodbus-dev \
     libusb-1.0-0 \
     libusb-1.0-0-dev \
     udev \
     && rm -rf /var/lib/apt/lists/*
 
 # =========================================================================
-# RealSense (realsense-ros 소스 빌드용)
+# RealSense
 # =========================================================================
-# - librealsense2        : RealSense SDK (realsense2_camera 빌드/실행)
-# - diagnostic-updater   : realsense2_camera 의존성
+# - librealsense2      : RealSense SDK (build/run realsense2_camera)
+# - diagnostic-updater : realsense2_camera dependency
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-${ROS_DISTRO}-librealsense2 \
     ros-${ROS_DISTRO}-diagnostic-updater \
@@ -129,6 +118,17 @@ RUN groupadd -f plugdev && \
     usermod -aG plugdev root && \
     usermod -aG dialout root && \
     usermod -aG video root
+
+# =========================================================================
+# Development Tools
+# =========================================================================
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bear \
+    clang-format \
+    clangd \
+    gdb \
+    gdbserver \
+    && rm -rf /var/lib/apt/lists/*
 
 # =========================================================================
 # Workspace Setup
